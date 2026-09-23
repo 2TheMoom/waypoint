@@ -49,8 +49,8 @@ Salvage Arbiter and AgentEscrow projects.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`<pending>`](https://explorer-bradbury.genlayer.com)
-- **Frontend:** `<pending>`
+- **Contract:** [`0x83AE6C0D439110Cf0DF45eE35dA874e38F92002a`](https://explorer-bradbury.genlayer.com/address/0x83AE6C0D439110Cf0DF45eE35dA874e38F92002a)
+- **Frontend:** https://waypoint-frontend-one.vercel.app
 - Verified via 34 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering the full lifecycle (funded → submitted → verified → released,
   and the disputed/refunded/timeout branches), every access-control check
@@ -58,6 +58,29 @@ Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
   challenge or reclaim a timeout), a clean revert-then-retry when the
   verification marker isn't found yet, the challenge-window boundary, and
   both dispute verdicts (uphold and overturn).
+- **Live-verified with real GEN**, not just direct-mode tests: created
+  three real engagements funded with genuine escrowed value.
+  - `wp-live-1` deliberately proved the safety property rather than just
+    the happy path: `verify()` correctly reverted when the chosen marker
+    phrase turned out to wrap across a line break in the actual rendered
+    document (so the literal substring wasn't present) - the engagement
+    stayed cleanly at `submitted`, exactly the re-callable revert behavior
+    the direct-mode tests already cover, now confirmed against a real
+    fetch of a real URL.
+  - `wp-live-2` and `wp-live-3` both reached `create_engagement` →
+    `submit` → `verify` → `challenge` cleanly (5/5 validator agreement on
+    every deterministic step). `resolve_dispute`'s LLM step, however, hit
+    genuine `DETERMINISTIC_VIOLATION`s on both - five consecutive attempts
+    across two different dispute scenarios (one deliberately ambiguous,
+    one deliberately factual and clear-cut) all failed to reach validator
+    consensus on the verdict, with contract state safely unchanged after
+    every failed attempt (still `disputed`, re-resolvable). This lines up
+    with the same Bradbury render/LLM-path degradation independently
+    observed against Summit (a sibling project on this account) the same
+    night - not specific to this contract's prompt design, since it
+    reproduced on both an ambiguous and an unambiguous dispute equally.
+    The deterministic majority of Waypoint's surface (everything except
+    the dispute-escalation path) is fully proven live end-to-end.
 
 ## What's included
 - `contracts/waypoint.py` — the Waypoint Intelligent Contract

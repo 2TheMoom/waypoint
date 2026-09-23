@@ -308,11 +308,11 @@ function EngagementHero({ id }: { id: string }) {
         </div>
       </div>
 
-      <div className="grid gap-6 mt-7" style={{ gridTemplateColumns: "1.3fr 1fr" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-[1.3fr_1fr] gap-6 mt-7">
         <div>
           <div className="eyebrow mb-2">Verification</div>
-          <p className="field-note">
-            Validators independently fetch <span style={{ color: "var(--brass-bright)" }}>{e.verification_url}</span> and
+          <p className="field-note break-words">
+            Validators independently fetch <span className="break-all" style={{ color: "var(--brass-bright)" }}>{e.verification_url}</span> and
             confirm the marker <span style={{ color: "var(--brass-bright)" }}>&quot;{e.verification_marker}&quot;</span> is present —
             not either party&apos;s word for it.
             {e.dispute_reason && (
@@ -433,7 +433,7 @@ export default function HomePage() {
   const others = useMemo(() => (list ?? []).filter((r) => r.id !== selectedId).slice().reverse(), [list, selectedId]);
 
   return (
-    <div className="max-w-[1040px] mx-auto px-5 pb-16 pt-7">
+    <div className="max-w-[1040px] mx-auto px-5 pb-16 pt-7 overflow-x-hidden">
       <Navbar />
 
       <div className="flex justify-between items-end gap-4 flex-wrap mb-6">
