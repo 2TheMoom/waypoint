@@ -1,0 +1,290 @@
+@import "tailwindcss";
+
+/* Typography: --font-head / --font-body / --font-mono are set by
+   next/font/google in layout.tsx (Fjalla One / Source Serif 4 /
+   JetBrains Mono) via the "variable" option. */
+
+@custom-variant dark (&:is(.dark *));
+
+/* Waypoint - "Field Registration": a survey-benchmark theme. Every stage
+   of an engagement's lifecycle is a checkpoint a cairn marks, not a
+   status a counterparty can just claim. Deep field-green, brass for the
+   traveled path, moss for the current/verified checkpoint, rust for a
+   disputed branch. Deliberately distinct from Fair Draw's observatory
+   HUD, Corroborate's instrument panel, and AgentEscrow's postmark. */
+:root {
+  --background: #101a0f;
+  --foreground: #e9e4d3;
+
+  --card: #172315;
+  --card-foreground: #e9e4d3;
+  --popover: #1c2a19;
+  --popover-foreground: #e9e4d3;
+
+  --primary: #bd935e;
+  --primary-foreground: #16210f;
+
+  --secondary: #1c2a19;
+  --secondary-foreground: #e9e4d3;
+
+  --muted: #172315;
+  --muted-foreground: #a7ad9c;
+
+  --accent: #bd935e;
+  --accent-foreground: #16210f;
+
+  /* Extra semantic tones beyond the shadcn set, matching the locked mock */
+  --brass: #bd935e;
+  --brass-bright: #dcb279;
+  --moss: #7fa06f;
+  --moss-dim: #4f6647;
+  --rust: #c17a4a;
+  --rust-dim: #8a5638;
+  --slate: #6f8a95;
+  --ink-faint: #6c7364;
+
+  --destructive: #c17a4a;
+  --destructive-foreground: #16210f;
+
+  --border: #2b362a;
+  --border-bright: #3c4a3a;
+  --input: #172315;
+  --ring: #bd935e;
+
+  --radius: 0rem;
+}
+
+.dark {
+  --background: #101a0f;
+  --foreground: #e9e4d3;
+  --card: #172315;
+  --card-foreground: #e9e4d3;
+  --popover: #1c2a19;
+  --popover-foreground: #e9e4d3;
+  --primary: #bd935e;
+  --primary-foreground: #16210f;
+  --secondary: #1c2a19;
+  --secondary-foreground: #e9e4d3;
+  --muted: #172315;
+  --muted-foreground: #a7ad9c;
+  --accent: #bd935e;
+  --accent-foreground: #16210f;
+  --destructive: #c17a4a;
+  --destructive-foreground: #16210f;
+  --border: #2b362a;
+  --input: #172315;
+  --ring: #bd935e;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: 0rem;
+  --radius-md: 0rem;
+  --radius-lg: 0rem;
+  --radius-xl: 0rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply text-foreground;
+    font-family: var(--font-body), Georgia, serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .font-head {
+    font-family: var(--font-head), sans-serif;
+  }
+  .font-mono {
+    font-family: var(--font-mono), 'Courier New', monospace;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .eyebrow {
+    font-family: var(--font-head), sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--brass);
+  }
+
+  /* ---------- buttons ---------- */
+  .btn-field {
+    font-family: var(--font-head), sans-serif;
+    letter-spacing: 0.05em;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    padding: 11px 20px;
+    border: 1px solid var(--brass);
+    background: transparent;
+    color: var(--brass-bright);
+    cursor: pointer;
+  }
+  .btn-field.solid { background: var(--brass); color: var(--primary-foreground); border-color: var(--brass); }
+  .btn-field.ghost { border-color: var(--border-bright); color: var(--muted-foreground); }
+  .btn-field.danger { border-color: var(--rust); color: var(--rust); }
+  .btn-field:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ---------- status pill ---------- */
+  .status-pill {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    border: 1px solid var(--moss);
+    color: var(--moss);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .status-pill.disputed { border-color: var(--rust); color: var(--rust); }
+  .status-pill.released { border-color: var(--brass); color: var(--brass-bright); }
+  .status-pill.refunded { border-color: var(--slate); color: var(--slate); }
+  .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- trail ---------- */
+  .trail-node { display: flex; flex-direction: column; align-items: center; flex: 1; position: relative; }
+  .trail-line {
+    position: absolute;
+    top: 21px;
+    left: 50%;
+    width: 100%;
+    height: 0;
+    border-top: 2px dashed var(--border-bright);
+    z-index: 0;
+  }
+  .trail-node.reached .trail-line { border-top-color: var(--brass); }
+  .trail-node:first-child .trail-line { display: none; }
+  .disk {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: var(--background);
+    border: 2px solid var(--border-bright);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1;
+    flex-shrink: 0;
+  }
+  .disk-inner { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--border-bright); }
+  .trail-node.reached .disk { border-color: var(--brass); background: var(--card); }
+  .trail-node.reached .disk-inner { border-color: var(--brass); background: var(--brass); }
+  .trail-node.current .disk { border-color: var(--moss); box-shadow: 0 0 0 3px rgba(127,160,111,0.18); }
+  .trail-node.current .disk-inner { border-color: var(--moss); background: var(--moss); }
+  .trail-node.branch .disk { border-color: var(--rust); }
+  .trail-node.branch .disk-inner { border-color: var(--rust); background: var(--rust); }
+  .trail-label {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-top: 9px;
+    text-align: center;
+  }
+  .trail-node.reached .trail-label, .trail-node.current .trail-label { color: var(--muted-foreground); }
+  .trail-node.current .trail-label { color: var(--moss); }
+  .trail-time { font-family: var(--font-mono), monospace; font-size: 0.6rem; color: var(--ink-faint); margin-top: 2px; }
+
+  /* ---------- mini trail (log rows) ---------- */
+  .mini-disk { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--border-bright); background: var(--background); }
+  .mini-disk.reached { border-color: var(--brass); background: var(--brass); }
+  .mini-disk.current { border-color: var(--moss); background: var(--moss); }
+  .mini-disk.branch { border-color: var(--rust); background: var(--rust); }
+  .mini-tick { width: 12px; height: 0; border-top: 1.5px dashed var(--border-bright); }
+  .mini-tick.reached { border-top-color: var(--brass); }
+
+  /* ---------- misc chrome ---------- */
+  .field-note {
+    font-family: var(--font-body), serif;
+    font-size: 0.98rem;
+    color: var(--foreground);
+    line-height: 1.65;
+    background: var(--card);
+    border-left: 2px solid var(--brass);
+    padding: 16px 18px;
+  }
+  .kv-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    font-family: var(--font-mono), monospace;
+    font-size: 0.8rem;
+    border-bottom: 1px dotted var(--border);
+    padding-bottom: 10px;
+  }
+  .kv-row .k { color: var(--ink-faint); letter-spacing: 0.04em; }
+  .kv-row .v { color: var(--foreground); text-align: right; word-break: break-word; }
+  .kv-row .v.brass { color: var(--brass-bright); }
+  .kv-row .v.amount { color: var(--moss); font-weight: 600; }
+
+  .network-chip {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.72rem;
+    color: var(--muted-foreground);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .network-chip .led { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 6px var(--moss); }
+
+  .wallet-chip {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.75rem;
+    color: var(--brass-bright);
+    border: 1px solid var(--border-bright);
+    padding: 7px 13px 7px 11px;
+    background: var(--card);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wallet-chip:hover { border-color: var(--brass); }
+  .wallet-chip:disabled { opacity: 0.6; cursor: default; }
+  .wallet-chip .mark-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 5px var(--moss); }
+  .wallet-chip .mark-dot.off { background: var(--ink-faint); box-shadow: none; }
+}
+
+html {
+  min-height: 100vh !important;
+  height: 100%;
+  scroll-behavior: smooth;
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(189,147,94,0.07), transparent),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 38px, rgba(127,160,111,0.035) 39px, transparent 40px),
+    #101a0f !important;
+  background-attachment: fixed !important;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh !important;
+  overscroll-behavior: none;
+}
