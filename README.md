@@ -30,35 +30,48 @@ objection against it, and only the verdict (`uphold`/`overturn`) is
 consensus-critical; the reasoning text is informational. If nobody
 disputes within the window, `release()` pays the provider. If the provider
 never submits by the deadline, `reclaim_timeout()` lets the client recover
-the escrow.
+the escrow - and `reclaim_stale()` covers the two states that can
+otherwise strand the escrow forever: submitted but never verified, or
+disputed with nobody willing to trigger resolution (which is itself now
+permissionless, not provider-only, for the same reason).
 
-**Known platform limitation, disclosed rather than hidden:** `emit_transfer`
-- the GenVM primitive a contract uses to pay out native value - does not
-currently deliver on GenLayer's Bradbury testnet
-([genvm-manager#20](https://github.com/genlayerlabs/genvm-manager/issues/20)).
-This was independently reproduced from this account the night this
-contract was built, using the exact minimal repro from that issue -
-`emit_transfer` still fails with all 5 validators voting `DISAGREE`
-against each other despite identical execution results, six days after a
-maintainer closed the issue saying a fix "must be" in the next node
-deployment. Every state transition in Waypoint up to and including the
-release/refund *decision* is real, on-chain, and independently verifiable;
-the final balance movement is blocked by this platform bug, not a defect
-here - the same disclosed limitation that also affects this account's
-Salvage Arbiter and AgentEscrow projects.
+**Payouts and refunds go through `gl.evm.contract_interface` (`Payee`),
+not `gl.get_contract_at()`.** Clients and providers are EOAs (plain
+wallets), and `gl.get_contract_at(addr).emit_transfer(...)` is an internal
+Intelligent-Contract dispatch message - for an address holding no
+contract code, that message is resolved by a handler that doesn't
+reliably reach validator majority, so the payout can leave this contract
+and be credited to nobody, intermittently and unpredictably.
+`gl.evm.contract_interface` instead emits a genuine external chain-layer
+value transfer (`EthSend` with empty calldata) - the SDK's documented
+primitive for paying an EOA. This was flagged directly by a GenLayer
+steward reviewing this project; previously this repo (like several others
+on this account) mischaracterized the resulting intermittent failures as
+an unconfirmed platform bug in
+[genvm-manager#20](https://github.com/genlayerlabs/genvm-manager/issues/20)
+rather than what it actually was: the wrong transfer primitive for the
+recipient type.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0x83AE6C0D439110Cf0DF45eE35dA874e38F92002a`](https://explorer-bradbury.genlayer.com/address/0x83AE6C0D439110Cf0DF45eE35dA874e38F92002a)
+- **Contract:** [`0xC8B46819875aF8c66eCc6cBc407B32C73826061d`](https://explorer-bradbury.genlayer.com/address/0xC8B46819875aF8c66eCc6cBc407B32C73826061d)
 - **Frontend:** https://waypoint-frontend-one.vercel.app
-- Verified via 34 passing direct-mode tests (`python -m pytest tests/direct/`),
+- Verified via 42 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering the full lifecycle (funded → submitted → verified → released,
   and the disputed/refunded/timeout branches), every access-control check
-  (only the provider can submit or resolve a dispute, only the client can
-  challenge or reclaim a timeout), a clean revert-then-retry when the
-  verification marker isn't found yet, the challenge-window boundary, and
-  both dispute verdicts (uphold and overturn).
-- **Live-verified with real GEN**, not just direct-mode tests: created
+  (only the provider can submit, only the client can challenge or
+  reclaim), a clean revert-then-retry when the verification marker isn't
+  found yet, the challenge-window boundary, both dispute verdicts (uphold
+  and overturn), `resolve_dispute`'s new permissionless access,
+  `reclaim_stale`'s recovery paths (stuck-submitted, stuck-disputed,
+  too-early, non-client caller, already-healthy engagement), a failed/
+  unreachable adjudication reverting cleanly instead of defaulting to
+  either verdict, and the dispute prompt genuinely wrapping untrusted
+  input in isolating tags (verified by requiring those tags in the mock
+  match pattern itself, not just asserting on the output).
+- **Live-verified with real GEN (previous deployment,
+  `0x83AE6C0D439110Cf0DF45eE35dA874e38F92002a`, superseded by the address
+  above after the `Payee` fix and other steward-requested changes)**: created
   three real engagements funded with genuine escrowed value.
   - `wp-live-1` deliberately proved the safety property rather than just
     the happy path: `verify()` correctly reverted when the chosen marker
@@ -82,11 +95,25 @@ Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
     The deterministic majority of Waypoint's surface (everything except
     the dispute-escalation path) is fully proven live end-to-end.
 
+### Payee fix verification (current deployment)
+Direct-mode tests (`test_reclaim_stale_*`, `test_resolve_dispute_is_
+permissionless`, the adjudication-hardening tests) exercise every new
+code path deterministically. A real end-to-end `create_engagement →
+submit → verify → release` cycle against the current address, isolating
+whether `Payee`'s payout is *reliable* rather than merely possible, needs
+a payable transaction - the bare `genlayer write` CLI has no flag for
+attaching native value to a call at all (`--fee-value` is the consensus
+fee deposit, not the call's value). A ready-to-run script
+(`verify-payee-live.mjs`, `genlayer-js` with real `value:`) is included
+in this repo for whoever holds the deployer key to run directly.
+
 ## What's included
 - `contracts/waypoint.py` — the Waypoint Intelligent Contract
 - `tests/direct/test_waypoint.py` — direct-mode tests (in-memory, mocked web/LLM)
 - **Contract linting** — static analysis to catch common contract issues before deployment
 - **CI pipeline** — GitHub Actions workflow for linting and direct tests
+- `verify-payee-live.mjs` — a real end-to-end script proving the `Payee`
+  payout mechanism delivers value, for whoever holds the deployer key
 - A Next.js 16 frontend (TypeScript, TanStack Query, Radix UI) — a
   survey-benchmark themed dashboard: a cairn-marked trail visualizing each
   engagement's real on-chain lifecycle, a live challenge-window countdown,
@@ -169,14 +196,20 @@ The app will be available at http://localhost:3000/.
    cleanly (re-callable) if the marker isn't found yet.
 4. **`challenge(engagement_id, reason)`** — client-only, within a
    10-minute window after verification.
-5. **`resolve_dispute(engagement_id)`** — provider-only. Validators weigh
-   the dispute reason against the live content via `gl.nondet.exec_prompt`
-   and release or refund accordingly.
+5. **`resolve_dispute(engagement_id)`** — permissionless (not
+   provider-only): an uncooperative provider can't strand a disputed
+   engagement forever. Validators weigh the dispute reason against the
+   live content via `gl.nondet.exec_prompt` and release or refund
+   accordingly.
 6. **`release(engagement_id)`** — permissionless, once the challenge
    window has passed with no dispute.
 7. **`reclaim_timeout(engagement_id)`** — client-only, if the provider
    never submitted by the deadline.
-8. **`get_engagement`** / **`get_all_engagement_ids`** — read back an
+8. **`reclaim_stale(engagement_id)`** — client-only recovery for an
+   engagement stuck 24 hours past deadline and still `submitted` (the
+   marker never appeared), or past `disputed_at` and still `disputed`
+   (adjudication never reached a clear verdict).
+9. **`get_engagement`** / **`get_all_engagement_ids`** — read back an
    engagement's full state, or enumerate every engagement on the contract.
 
 ## Testing Strategy
