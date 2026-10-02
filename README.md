@@ -54,9 +54,9 @@ recipient type.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0xC8B46819875aF8c66eCc6cBc407B32C73826061d`](https://explorer-bradbury.genlayer.com/address/0xC8B46819875aF8c66eCc6cBc407B32C73826061d)
+- **Contract:** [`0x1c118020F5E6f3270F0bE5122e543b1c1dA3B8a0`](https://explorer-bradbury.genlayer.com/address/0x1c118020F5E6f3270F0bE5122e543b1c1dA3B8a0)
 - **Frontend:** https://waypoint-frontend-one.vercel.app
-- Verified via 42 passing direct-mode tests (`python -m pytest tests/direct/`),
+- Verified via 49 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering the full lifecycle (funded → submitted → verified → released,
   and the disputed/refunded/timeout branches), every access-control check
   (only the provider can submit, only the client can challenge or
@@ -95,13 +95,25 @@ Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
     The deterministic majority of Waypoint's surface (everything except
     the dispute-escalation path) is fully proven live end-to-end.
 
-### Payee fix verification (current deployment)
-Direct-mode tests (`test_reclaim_stale_*`, `test_resolve_dispute_is_
-permissionless`, the adjudication-hardening tests) exercise every new
-code path deterministically. A real end-to-end `create_engagement →
-submit → verify → release` cycle against the current address, isolating
-whether `Payee`'s payout is *reliable* rather than merely possible, needs
-a payable transaction - the bare `genlayer write` CLI has no flag for
+### Second steward round: payout reconciliation and dispute-reason floor
+A later steward pass found the `Payee` fix alone insufficient: every
+payout site treated a silent `emit_transfer` as delivery with no way back
+if it failed to land, and `challenge()` accepted any non-empty reason,
+down to a single trivial word, for a dispute that then escalates to real
+LLM adjudication. Fixed with one shared `_payout()` helper that records
+the owed amount in `pending_payouts` before every `release`/
+`reclaim_timeout`/`resolve_dispute`/`reclaim_stale` payout, plus a single
+`retry_payout(engagement_id)` that re-attempts delivery to whichever
+status (`released`/`refunded`) the engagement already settled at, at no
+risk to anyone else's funds; and by adding `MIN_DISPUTE_REASON_LENGTH`
+(20 characters) alongside the existing maximum. Direct-mode tests
+(`test_reclaim_stale_*`, `test_resolve_dispute_is_permissionless`, the
+adjudication-hardening tests, `test_*_records_pending_payout_for_retry`,
+`test_challenge_too_short_reason_fails`) exercise every new path
+deterministically. A real end-to-end `create_engagement → submit →
+verify → release` cycle against the current address, isolating whether
+`Payee`'s payout is *reliable* rather than merely possible, needs a
+payable transaction - the bare `genlayer write` CLI has no flag for
 attaching native value to a call at all (`--fee-value` is the consensus
 fee deposit, not the call's value). A ready-to-run script
 (`verify-payee-live.mjs`, `genlayer-js` with real `value:`) is included

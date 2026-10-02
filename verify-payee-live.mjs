@@ -1,20 +1,17 @@
-// Proves the Payee (gl.evm.contract_interface) EOA-transfer fix actually
-// delivers value, where the old gl.get_contract_at().emit_transfer() path
-// silently lost it. Runs Waypoint's full unchallenged happy path for real:
-// create_engagement -> submit -> verify -> release, then reads the
-// provider's on-chain balance before and after to confirm it actually rose
-// by the escrowed amount.
+// Proves the Payee payout mechanism delivers value for real:
+// gl.evm.contract_interface-wrapped emit_transfer (EthSend, an external
+// chain-layer message through this IC's own ghost contract) - the SDK's
+// documented path for paying a wallet, not gl.get_contract_at().
+// emit_transfer(), an internal GenVM-layer message with nowhere valid to
+// land at a plain EOA's address. Runs Waypoint's full unchallenged happy
+// path for real: create_engagement -> submit -> verify -> release, then
+// reads the provider's on-chain balance before and after to confirm it
+// actually rose by the escrowed amount.
 //
 // Usage (PowerShell):
 //   $env:PK = "0x<64-hex-char private key of the CLIENT account>"
+//   $env:PK2 = "0x<64-hex-char private key of the PROVIDER account>"
 //   node verify-payee-live.mjs
-//
-// The PROVIDER is a separate, already-funded-with-nothing test account
-// (emit-transfer-tester, 0xf0c5d1ffc5f9659e85d5fba6c6c058c8a99657b1) - you
-// don't need its key, only its address, since anyone can call submit()...
-// actually submit() is provider-only, so this script needs the PROVIDER's
-// key too. Set PK2 for that:
-//   $env:PK2 = "0x<64-hex-char private key of emit-transfer-tester>"
 //
 // Get both via: genlayer account export --name <account-name>
 // (exports a keystore file; decrypt it yourself, this script never sees
@@ -23,7 +20,7 @@
 import { createAccount, createClient } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
 
-const CONTRACT = "0xC8B46819875aF8c66eCc6cBc407B32C73826061d";
+const CONTRACT = "0x1c118020F5E6f3270F0bE5122e543b1c1dA3B8a0";
 const PROVIDER_ADDRESS = "0xf0c5d1ffc5f9659e85d5fba6c6c058c8a99657b1";
 const ENGAGEMENT_ID = "wp-live-fix-" + Date.now();
 const VALUE = 1000000000000000n; // 0.001 GEN
@@ -62,7 +59,7 @@ async function main() {
     args: [
       ENGAGEMENT_ID,
       PROVIDER_ADDRESS,
-      "Prove the Payee EOA transfer primitive genuinely delivers value",
+      "Prove the native PostMessage transfer primitive genuinely delivers value",
       "https://raw.githubusercontent.com/genlayerlabs/genlayer-project-boilerplate/main/README.md",
       "football bets",
       deadline,
@@ -101,7 +98,7 @@ async function main() {
   const balanceAfter = await clientClient.getBalance({ address: PROVIDER_ADDRESS });
   console.log(`\nProvider balance after: ${balanceAfter} wei`);
   console.log(`Delta: ${balanceAfter - balanceBefore} wei (expected ${VALUE} wei)`);
-  console.log(balanceAfter - balanceBefore === VALUE ? "\n✔ CONFIRMED: Payee delivered the exact escrowed amount." : "\n✖ Delta did not match - investigate.");
+  console.log(balanceAfter - balanceBefore === VALUE ? "\n✔ CONFIRMED: the native transfer delivered the exact escrowed amount." : "\n✖ Delta did not match - investigate.");
 }
 
 main().catch((e) => {
