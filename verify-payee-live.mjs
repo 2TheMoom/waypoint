@@ -20,7 +20,7 @@
 import { createAccount, createClient } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
 
-const CONTRACT = "0x1c118020F5E6f3270F0bE5122e543b1c1dA3B8a0";
+const CONTRACT = "0xF9C9CC08826E464a5Dd177B739e1E7054CA43Aa1";
 const PROVIDER_ADDRESS = "0xf0c5d1ffc5f9659e85d5fba6c6c058c8a99657b1";
 const ENGAGEMENT_ID = "wp-live-fix-" + Date.now();
 const VALUE = 1000000000000000n; // 0.001 GEN

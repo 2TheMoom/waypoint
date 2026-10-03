@@ -54,9 +54,9 @@ recipient type.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0x1c118020F5E6f3270F0bE5122e543b1c1dA3B8a0`](https://explorer-bradbury.genlayer.com/address/0x1c118020F5E6f3270F0bE5122e543b1c1dA3B8a0)
+- **Contract:** [`0xF9C9CC08826E464a5Dd177B739e1E7054CA43Aa1`](https://explorer-bradbury.genlayer.com/address/0xF9C9CC08826E464a5Dd177B739e1E7054CA43Aa1)
 - **Frontend:** https://waypoint-frontend-one.vercel.app
-- Verified via 49 passing direct-mode tests (`python -m pytest tests/direct/`),
+- Verified via 50 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering the full lifecycle (funded → submitted → verified → released,
   and the disputed/refunded/timeout branches), every access-control check
   (only the provider can submit, only the client can challenge or
@@ -104,20 +104,34 @@ LLM adjudication. Fixed with one shared `_payout()` helper that records
 the owed amount in `pending_payouts` before every `release`/
 `reclaim_timeout`/`resolve_dispute`/`reclaim_stale` payout, plus a single
 `retry_payout(engagement_id)` that re-attempts delivery to whichever
-status (`released`/`refunded`) the engagement already settled at, at no
-risk to anyone else's funds; and by adding `MIN_DISPUTE_REASON_LENGTH`
-(20 characters) alongside the existing maximum. Direct-mode tests
-(`test_reclaim_stale_*`, `test_resolve_dispute_is_permissionless`, the
-adjudication-hardening tests, `test_*_records_pending_payout_for_retry`,
-`test_challenge_too_short_reason_fails`) exercise every new path
-deterministically. A real end-to-end `create_engagement → submit →
-verify → release` cycle against the current address, isolating whether
-`Payee`'s payout is *reliable* rather than merely possible, needs a
-payable transaction - the bare `genlayer write` CLI has no flag for
-attaching native value to a call at all (`--fee-value` is the consensus
-fee deposit, not the call's value). A ready-to-run script
-(`verify-payee-live.mjs`, `genlayer-js` with real `value:`) is included
-in this repo for whoever holds the deployer key to run directly.
+status (`released`/`refunded`) the engagement already settled at; and by
+adding `MIN_DISPUTE_REASON_LENGTH` (20 characters) alongside the existing
+maximum.
+
+### Third steward round: a real fund-safety bug in the retry itself
+This fix was still wrong: `pending_payouts` was never cleared after a
+successful delivery, so a provider/client whose payout actually landed
+could call `retry_payout` again anyway, firing a second real transfer of
+the same amount and consuming GEN owed to other engagements - an
+unbounded drain, not a rare edge case, and the steward caught it
+correctly. Fixed with a `pending_floor` snapshot: the recipient's balance
+is recorded right before the first attempt, and `retry_payout` now reads
+the recipient's *current* balance and compares it against `floor +
+amount` - if the payout already landed, it clears `pending_payouts` and
+refuses instead of re-sending. `test_retry_payout_blocked_once_balance_
+confirms_delivery` proves this directly (simulates delivery via the
+direct-mode harness's `deal()`, confirms retry refuses and the record is
+actually cleared, not just blocked once). 50 tests pass, lint clean.
+Redeployed: `0xF9C9CC08826E464a5Dd177B739e1E7054CA43Aa1`.
+
+A real end-to-end `create_engagement → submit → verify → release` cycle
+against the current address, isolating whether `Payee`'s payout is
+*reliable* rather than merely possible, needs a payable transaction - the
+bare `genlayer write` CLI has no flag for attaching native value to a
+call at all (`--fee-value` is the consensus fee deposit, not the call's
+value). A ready-to-run script (`verify-payee-live.mjs`, `genlayer-js`
+with real `value:`) is included in this repo for whoever holds the
+deployer key to run directly.
 
 ## What's included
 - `contracts/waypoint.py` — the Waypoint Intelligent Contract

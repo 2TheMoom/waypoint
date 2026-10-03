@@ -72,16 +72,16 @@ class Waypoint(gl.Contract):
     submits by the deadline, the client can reclaim the escrow.
 
     reclaim_stale() recovers an engagement stuck past
-    RECOVERY_TIMEOUT_SECONDS with no progress. resolve_dispute() is
-    permissionless so an uncooperative provider can't strand a disputed
-    engagement. _pay() can fail to land independently of the call that
-    attempts it, so every payout site records the owed amount in
-    pending_payouts instead of treating a silent send as delivery;
-    retry_payout() re-attempts it."""
+    RECOVERY_TIMEOUT_SECONDS. resolve_dispute() is permissionless so an
+    uncooperative provider can't strand a dispute. _pay() can fail to land
+    independently of the call - pending_payouts/pending_floor record the
+    owed amount and a balance snapshot; retry_payout() re-attempts,
+    clearing the record once the balance confirms delivery."""
 
     engagements: TreeMap[str, Engagement]
     engagement_ids: DynArray[str]
     pending_payouts: TreeMap[str, u256]  # engagement_id -> amount still owed/retriable
+    pending_floor: TreeMap[str, u256]  # engagement_id -> recipient balance before the first attempt
 
     def __init__(self):
         pass
@@ -96,6 +96,7 @@ class Waypoint(gl.Contract):
 
     def _payout(self, engagement_id: str, recipient: Address, amount: u256) -> None:
         self.pending_payouts[engagement_id] = amount
+        self.pending_floor[engagement_id] = Payee(recipient).balance
         _pay(recipient, amount)
 
     @gl.public.write
@@ -105,11 +106,15 @@ class Waypoint(gl.Contract):
         if amount == 0:
             raise gl.vm.UserError("No pending payout for this engagement")
         if e.status == "released":
-            _pay(e.provider, amount)
+            recipient = e.provider
         elif e.status == "refunded":
-            _pay(e.client, amount)
+            recipient = e.client
         else:
             raise gl.vm.UserError(f"Engagement has no settled payout to retry (status: {e.status})")
+        if Payee(recipient).balance >= self.pending_floor.get(engagement_id, u256(0)) + amount:
+            self.pending_payouts[engagement_id] = u256(0)
+            raise gl.vm.UserError("Payout already delivered - nothing to retry")
+        _pay(recipient, amount)
 
     @gl.public.write.payable
     def create_engagement(

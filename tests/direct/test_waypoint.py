@@ -465,6 +465,27 @@ def test_retry_payout_without_a_pending_payout_fails(direct_vm, direct_deploy, d
         contract.retry_payout("wp-1")
 
 
+def test_retry_payout_blocked_once_balance_confirms_delivery(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """The real bug a steward caught: pending_payouts alone never proved
+    delivery, so a provider whose payout actually succeeded could call
+    retry forever and drain funds owed to other engagements. Once the
+    recipient's own balance shows the payout already landed, retry must
+    refuse to re-send it - and clear the record so it can't even be asked
+    again."""
+    contract = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _to_verified(direct_vm, contract, direct_alice, direct_bob)
+    direct_vm.warp("2026-01-01T00:15:00Z")
+    contract.release("wp-1")
+
+    direct_vm.deal(direct_bob, 10**18)  # simulate the payout having actually landed
+    with direct_vm.expect_revert("already delivered"):
+        contract.retry_payout("wp-1")
+
+    with direct_vm.expect_revert("No pending payout"):
+        contract.retry_payout("wp-1")  # cleared, not just blocked once
+
+
 # ---------------------------------------------------------------------------
 # reclaim_timeout
 # ---------------------------------------------------------------------------
