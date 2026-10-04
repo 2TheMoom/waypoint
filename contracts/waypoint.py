@@ -9,6 +9,7 @@ RECOVERY_TIMEOUT_SECONDS = 86400  # 24h - a stuck engagement unwinds after this
 MAX_DELIVERABLE_DESCRIPTION_LENGTH = 2000
 MIN_DISPUTE_REASON_LENGTH = 20
 MAX_DISPUTE_REASON_LENGTH = 2000
+MAX_RETRIES = 3  # bounds worst-case exposure to (1 + MAX_RETRIES)x the owed amount
 
 REQUEST_HEADERS = {
     "Accept": "text/html,application/json,*/*",
@@ -82,6 +83,7 @@ class Waypoint(gl.Contract):
     engagement_ids: DynArray[str]
     pending_payouts: TreeMap[str, u256]  # engagement_id -> amount still owed/retriable
     pending_floor: TreeMap[str, u256]  # engagement_id -> recipient balance before the first attempt
+    retry_count: TreeMap[str, u256]  # engagement_id -> number of retry_payout attempts so far
 
     def __init__(self):
         pass
@@ -101,6 +103,17 @@ class Waypoint(gl.Contract):
 
     @gl.public.write
     def retry_payout(self, engagement_id: str) -> None:
+        """Two fixes over the first version, both steward-caught: (1) the
+        "already delivered" path used to clear pending_payouts and then
+        raise - raising reverts the whole call, so that clear never
+        actually persisted, leaving the balance-check exploitable the
+        same way every time. Now it returns normally instead, so the
+        clear sticks. (2) retry eligibility was inferred purely from the
+        recipient's current balance, which a recipient spending or
+        transferring funds afterward can push back below the recorded
+        floor - making an already-delivered payout look retryable again
+        indefinitely. MAX_RETRIES now bounds the worst case to a fixed,
+        small multiple of the owed amount instead of unlimited resends."""
         e = self._get(engagement_id)
         amount = self.pending_payouts.get(engagement_id, u256(0))
         if amount == 0:
@@ -113,7 +126,14 @@ class Waypoint(gl.Contract):
             raise gl.vm.UserError(f"Engagement has no settled payout to retry (status: {e.status})")
         if Payee(recipient).balance >= self.pending_floor.get(engagement_id, u256(0)) + amount:
             self.pending_payouts[engagement_id] = u256(0)
-            raise gl.vm.UserError("Payout already delivered - nothing to retry")
+            return  # delivered - clear and exit cleanly, no raise, no re-send
+        count = self.retry_count.get(engagement_id, u256(0))
+        if count >= MAX_RETRIES:
+            raise gl.vm.UserError(
+                f"Retry limit ({MAX_RETRIES}) reached for this engagement - balance still doesn't "
+                "confirm delivery; this needs manual review, not another automatic retry"
+            )
+        self.retry_count[engagement_id] = count + 1
         _pay(recipient, amount)
 
     @gl.public.write.payable
@@ -392,3 +412,7 @@ class Waypoint(gl.Contract):
     @gl.public.view
     def get_pending_payout(self, engagement_id: str) -> u256:
         return self.pending_payouts.get(engagement_id, u256(0))
+
+    @gl.public.view
+    def get_retry_count(self, engagement_id: str) -> u256:
+        return self.retry_count.get(engagement_id, u256(0))
