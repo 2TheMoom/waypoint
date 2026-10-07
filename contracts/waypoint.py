@@ -75,14 +75,17 @@ class Waypoint(gl.Contract):
     reclaim_stale() recovers an engagement stuck past
     RECOVERY_TIMEOUT_SECONDS. resolve_dispute() is permissionless so an
     uncooperative provider can't strand a dispute. _pay() can fail to land
-    independently of the call - pending_payouts/pending_floor record the
-    owed amount and a balance snapshot; retry_payout() re-attempts,
-    clearing the record once the balance confirms delivery."""
+    independently of the call - pending_payouts records the owed amount;
+    retry_payout() re-attempts, bounded by MAX_RETRIES and callable only
+    by the actual recipient. GenVM exposes no signal that can confirm
+    delivery, so retry is deliberately blind rather than inferring
+    "already delivered" from the recipient's balance, which can both miss
+    a genuine failure (an unrelated balance rise) and duplicate a genuine
+    success (a delayed balance update)."""
 
     engagements: TreeMap[str, Engagement]
     engagement_ids: DynArray[str]
     pending_payouts: TreeMap[str, u256]  # engagement_id -> amount still owed/retriable
-    pending_floor: TreeMap[str, u256]  # engagement_id -> recipient balance before the first attempt
     retry_count: TreeMap[str, u256]  # engagement_id -> number of retry_payout attempts so far
 
     def __init__(self):
@@ -98,22 +101,18 @@ class Waypoint(gl.Contract):
 
     def _payout(self, engagement_id: str, recipient: Address, amount: u256) -> None:
         self.pending_payouts[engagement_id] = amount
-        self.pending_floor[engagement_id] = Payee(recipient).balance
         _pay(recipient, amount)
 
     @gl.public.write
     def retry_payout(self, engagement_id: str) -> None:
-        """Two fixes over the first version, both steward-caught: (1) the
-        "already delivered" path used to clear pending_payouts and then
-        raise - raising reverts the whole call, so that clear never
-        actually persisted, leaving the balance-check exploitable the
-        same way every time. Now it returns normally instead, so the
-        clear sticks. (2) retry eligibility was inferred purely from the
-        recipient's current balance, which a recipient spending or
-        transferring funds afterward can push back below the recorded
-        floor - making an already-delivered payout look retryable again
-        indefinitely. MAX_RETRIES now bounds the worst case to a fixed,
-        small multiple of the owed amount instead of unlimited resends."""
+        """A steward-caught design flaw, not just a bug: using the
+        recipient's wallet balance as proof of delivery is unsound in both
+        directions - a delayed balance update can make a landed transfer
+        look undelivered (duplicating it), and an unrelated balance rise
+        can make a lost transfer look delivered (silently losing it).
+        GenVM exposes no other signal to confirm delivery, so retry is now
+        blind: bounded only by MAX_RETRIES, and restricted to the actual
+        recipient so nobody else can spend down another party's retries."""
         e = self._get(engagement_id)
         amount = self.pending_payouts.get(engagement_id, u256(0))
         if amount == 0:
@@ -124,15 +123,11 @@ class Waypoint(gl.Contract):
             recipient = e.client
         else:
             raise gl.vm.UserError(f"Engagement has no settled payout to retry (status: {e.status})")
-        if Payee(recipient).balance >= self.pending_floor.get(engagement_id, u256(0)) + amount:
-            self.pending_payouts[engagement_id] = u256(0)
-            return  # delivered - clear and exit cleanly, no raise, no re-send
+        if gl.message.sender_address != recipient:
+            raise gl.vm.UserError("Only the recipient may retry")
         count = self.retry_count.get(engagement_id, u256(0))
         if count >= MAX_RETRIES:
-            raise gl.vm.UserError(
-                f"Retry limit ({MAX_RETRIES}) reached for this engagement - balance still doesn't "
-                "confirm delivery; this needs manual review, not another automatic retry"
-            )
+            raise gl.vm.UserError(f"Retry limit ({MAX_RETRIES}) reached for this engagement")
         self.retry_count[engagement_id] = count + 1
         _pay(recipient, amount)
 

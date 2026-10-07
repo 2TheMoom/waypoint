@@ -54,9 +54,9 @@ recipient type.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0xF9C9CC08826E464a5Dd177B739e1E7054CA43Aa1`](https://explorer-bradbury.genlayer.com/address/0xF9C9CC08826E464a5Dd177B739e1E7054CA43Aa1)
+- **Contract:** [`0x56BaaeeCD1A163F29cc9868B75B61a4Ee3AeA976`](https://explorer-bradbury.genlayer.com/address/0x56BaaeeCD1A163F29cc9868B75B61a4Ee3AeA976)
 - **Frontend:** https://waypoint-frontend-one.vercel.app
-- Verified via 50 passing direct-mode tests (`python -m pytest tests/direct/`),
+- Verified via 52 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering the full lifecycle (funded → submitted → verified → released,
   and the disputed/refunded/timeout branches), every access-control check
   (only the provider can submit, only the client can challenge or
@@ -132,6 +132,21 @@ call at all (`--fee-value` is the consensus fee deposit, not the call's
 value). A ready-to-run script (`verify-payee-live.mjs`, `genlayer-js`
 with real `value:`) is included in this repo for whoever holds the
 deployer key to run directly.
+
+### Fourth steward round: the balance check itself was unsound
+The `pending_floor` balance check above was still wrong in both
+directions, not just unbounded: a delayed balance update can make a
+transfer that already landed look undelivered (firing a duplicate), and
+an unrelated balance rise (a provider or client receiving unrelated GEN)
+can make a transfer that never landed look delivered, silently losing it
+forever - GenVM exposes no other signal to confirm delivery. Removed the
+balance check entirely. `retry_payout` is now blind: it always resends up
+to `MAX_RETRIES`, restricted to the actual recipient
+(`gl.message.sender_address != recipient` reverts) so nobody else can
+spend down another party's retry budget. `test_retry_payout_ignores_
+recipient_balance` and `test_retry_payout_by_non_recipient_fails` cover
+both properties directly. 52 tests pass, lint clean, 18,383 bytes.
+Redeployed: `0x56BaaeeCD1A163F29cc9868B75B61a4Ee3AeA976`.
 
 ## What's included
 - `contracts/waypoint.py` — the Waypoint Intelligent Contract

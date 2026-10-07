@@ -465,45 +465,41 @@ def test_retry_payout_without_a_pending_payout_fails(direct_vm, direct_deploy, d
         contract.retry_payout("wp-1")
 
 
-def test_retry_payout_clears_cleanly_once_balance_confirms_delivery(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """First steward-caught bug, fixed: the "already delivered" path used
-    to clear pending_payouts and then raise - raising reverts the whole
-    call, so the clear never actually persisted and the same balance
-    check could be exploited again after the recipient's own balance
-    later dropped back down (e.g. they spent the funds). Now the clear
-    path returns normally instead of raising, so it actually sticks."""
+def test_retry_payout_ignores_recipient_balance(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """A steward-caught design flaw: using the recipient's wallet balance
+    as proof of delivery can both duplicate an already-delivered transfer
+    and silently "clear" a payout that never actually landed. Retry is now
+    deliberately blind to balance - it stays on record and keeps counting
+    toward MAX_RETRIES no matter what the recipient's wallet holds."""
     contract = direct_deploy(CONTRACT)
     direct_vm.warp(T0)
     _to_verified(direct_vm, contract, direct_alice, direct_bob)
     direct_vm.warp("2026-01-01T00:15:00Z")
     contract.release("wp-1")
 
-    direct_vm.deal(direct_bob, 10**18)  # simulate the payout having actually landed
-    contract.retry_payout("wp-1")  # must not revert - just clears, no re-send
-    assert contract.get_pending_payout("wp-1") == 0
+    direct_vm.deal(direct_bob, 10**18)  # a huge unrelated balance bump
+    contract.retry_payout("wp-1")  # still retries, not silently treated as "delivered"
+    assert contract.get_pending_payout("wp-1") == 1000
 
-    # the clear genuinely persisted - even if the recipient's balance later
-    # drops back down (they spent it), there's nothing left to re-exploit
-    direct_vm.deal(direct_bob, -(10**18))
-    with direct_vm.expect_revert("No pending payout"):
+
+def test_retry_payout_by_non_recipient_fails(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _to_verified(direct_vm, contract, direct_alice, direct_bob)
+    direct_vm.warp("2026-01-01T00:15:00Z")
+    contract.release("wp-1")
+
+    direct_vm.sender = direct_charlie  # not the provider
+    with direct_vm.expect_revert("Only the recipient may retry"):
         contract.retry_payout("wp-1")
 
 
 def test_retry_payout_bounded_by_max_retries(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """Second steward-caught bug, fixed: retry eligibility was inferred
-    purely from the recipient's current balance, so a recipient who kept
-    spending/transferring funds back below the recorded floor could make
-    an already-delivered payout look retryable forever - an unbounded
-    drain via repeated balance manipulation, not just a rare edge case.
-    MAX_RETRIES now caps the worst case at a fixed, small multiple of the
-    owed amount instead of unlimited resends."""
     contract = direct_deploy(CONTRACT)
     direct_vm.warp(T0)
     _to_verified(direct_vm, contract, direct_alice, direct_bob)
     direct_vm.warp("2026-01-01T00:15:00Z")
     contract.release("wp-1")
-    # balance never confirms delivery in this test, simulating a recipient
-    # who (genuinely or not) always looks like they haven't received it
 
     for _ in range(3):  # MAX_RETRIES
         contract.retry_payout("wp-1")
