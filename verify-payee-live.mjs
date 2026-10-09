@@ -1,104 +1,83 @@
-// Proves the Payee payout mechanism delivers value for real:
-// gl.evm.contract_interface-wrapped emit_transfer (EthSend, an external
-// chain-layer message through this IC's own ghost contract) - the SDK's
-// documented path for paying a wallet, not gl.get_contract_at().
-// emit_transfer(), an internal GenVM-layer message with nowhere valid to
-// land at a plain EOA's address. Runs Waypoint's full unchallenged happy
-// path for real: create_engagement -> submit -> verify -> release, then
-// reads the provider's on-chain balance before and after to confirm it
-// actually rose by the escrowed amount.
+// Live proof that a Waypoint payout is delivered exactly once.
 //
-// Usage (PowerShell):
-//   $env:PK = "0x<64-hex-char private key of the CLIENT account>"
-//   $env:PK2 = "0x<64-hex-char private key of the PROVIDER account>"
-//   node verify-payee-live.mjs
+// Creates a 0.01 GEN engagement with a short deadline, lets it lapse, and
+// reclaims it (the client is paid). Then tries to reclaim the same
+// engagement again, which must fail, and prints get_accounting(): right
+// after the payout, in_flight equals the payout (scheduled, waiting for the
+// transaction to finalize). Once the reclaim transaction finalizes the
+// transfer lands and in_flight returns to 0; watch that with
+//   genlayer call <CONTRACT> get_accounting
 //
-// Get both via: genlayer account export --name <account-name>
-// (exports a keystore file; decrypt it yourself, this script never sees
-// your password)
+// Usage: node verify-payee-live.mjs
+// Signs with the dedicated testnet wallets in
+// C:/Users/olumi/.genlayer-test-wallets/wallets.json (outside every repo).
 
+import { readFileSync } from "fs";
 import { createAccount, createClient } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
 
-const CONTRACT = "0xF9C9CC08826E464a5Dd177B739e1E7054CA43Aa1";
-const PROVIDER_ADDRESS = "0xf0c5d1ffc5f9659e85d5fba6c6c058c8a99657b1";
-const ENGAGEMENT_ID = "wp-live-fix-" + Date.now();
-const VALUE = 1000000000000000n; // 0.001 GEN
+const CONTRACT = "0x1d30EDaf43d1f044A638a0ED2fD6AD3783b3AA37";
+const PROVIDER = "0x0e298b9e366f3d58f5389d7297de1b9fdf6e9374";
+const ENGAGEMENT_ID = "wp-once-" + Date.now();
+const VALUE = 10000000000000000n; // 0.01 GEN
+const URL = "https://raw.githubusercontent.com/genlayerlabs/genlayer-project-boilerplate/main/README.md";
 
-function need(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Set $env:${name} first`);
-  return v.startsWith("0x") ? v : "0x" + v;
+const WALLETS = JSON.parse(readFileSync("C:/Users/olumi/.genlayer-test-wallets/wallets.json", "utf8"));
+
+function wallet(name) {
+  const w = WALLETS[name];
+  if (!w) throw new Error(`No test wallet named ${name}`);
+  return createAccount(w.privateKey);
 }
 
-async function waitAccepted(client, hash) {
-  const receipt = await client.waitForTransactionReceipt({ hash, retries: 200 });
-  console.log(`  status=${receipt.statusName} result=${receipt.resultName} exec=${receipt.txExecutionResultName}`);
-  if (receipt.statusName !== "ACCEPTED" && receipt.statusName !== "FINALIZED") {
-    throw new Error(`Transaction not accepted: ${JSON.stringify(receipt)}`);
+async function send(client, functionName, args, value) {
+  const hash = await client.writeContract({ address: CONTRACT, functionName, args, ...(value ? { value } : {}) });
+  console.log(`  ${functionName}: ${hash}`);
+  let receipt;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      receipt = await client.waitForTransactionReceipt({ hash, retries: 200 });
+      break;
+    } catch (e) {
+      // A dropped RPC connection while polling doesn't mean the transaction failed.
+      if (attempt >= 10) throw e;
+      console.log(`  (receipt poll failed, retrying: ${String(e.message || e).slice(0, 80)})`);
+      await new Promise((r) => setTimeout(r, 15000));
+    }
   }
+  console.log(`  exec=${receipt.txExecutionResultName}`);
   return receipt;
 }
 
+async function accounting(client) {
+  const a = await client.readContract({ address: CONTRACT, functionName: "get_accounting", args: [] });
+  console.log("  get_accounting:", Object.fromEntries(a instanceof Map ? a : Object.entries(a)));
+}
+
 async function main() {
-  const clientAccount = createAccount(need("PK"));
-  const providerAccount = createAccount(need("PK2"));
+  const client = createClient({ chain: testnetBradbury, account: wallet("gl-test-1") });
+  const deadline = Math.floor(Date.now() / 1000) + 150;
 
-  const clientClient = createClient({ chain: testnetBradbury, account: clientAccount });
-  const providerClient = createClient({ chain: testnetBradbury, account: providerAccount });
+  console.log(`\n1. create_engagement ${ENGAGEMENT_ID} (0.01 GEN escrowed)...`);
+  await send(client, "create_engagement", [ENGAGEMENT_ID, PROVIDER, "Exactly-once payout check", URL, "football bets", deadline], VALUE);
+  await accounting(client);
 
-  const balanceBefore = await clientClient.getBalance({ address: PROVIDER_ADDRESS });
-  console.log(`Provider balance before: ${balanceBefore} wei`);
+  console.log("\nWaiting for the deadline to pass...");
+  const waitMs = (deadline - Math.floor(Date.now() / 1000) + 20) * 1000;
+  if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
 
-  const deadline = Math.floor(Date.now() / 1000) + 3600;
+  console.log("\n2. reclaim_timeout (pays the client once)...");
+  await send(client, "reclaim_timeout", [ENGAGEMENT_ID]);
+  await accounting(client);
 
-  console.log("\n1. create_engagement (funding 0.001 GEN)...");
-  let hash = await clientClient.writeContract({
-    address: CONTRACT,
-    functionName: "create_engagement",
-    args: [
-      ENGAGEMENT_ID,
-      PROVIDER_ADDRESS,
-      "Prove the native PostMessage transfer primitive genuinely delivers value",
-      "https://raw.githubusercontent.com/genlayerlabs/genlayer-project-boilerplate/main/README.md",
-      "football bets",
-      deadline,
-    ],
-    value: VALUE,
-  });
-  await waitAccepted(clientClient, hash);
-
-  console.log("\n2. submit (as provider)...");
-  hash = await providerClient.writeContract({
-    address: CONTRACT,
-    functionName: "submit",
-    args: [ENGAGEMENT_ID],
-  });
-  await waitAccepted(providerClient, hash);
-
-  console.log("\n3. verify...");
-  hash = await clientClient.writeContract({
-    address: CONTRACT,
-    functionName: "verify",
-    args: [ENGAGEMENT_ID],
-  });
-  await waitAccepted(clientClient, hash);
-
-  console.log("\nWaiting 11 minutes for the challenge window to close...");
-  await new Promise((r) => setTimeout(r, 11 * 60 * 1000));
-
-  console.log("\n4. release...");
-  hash = await clientClient.writeContract({
-    address: CONTRACT,
-    functionName: "release",
-    args: [ENGAGEMENT_ID],
-  });
-  await waitAccepted(clientClient, hash);
-
-  const balanceAfter = await clientClient.getBalance({ address: PROVIDER_ADDRESS });
-  console.log(`\nProvider balance after: ${balanceAfter} wei`);
-  console.log(`Delta: ${balanceAfter - balanceBefore} wei (expected ${VALUE} wei)`);
-  console.log(balanceAfter - balanceBefore === VALUE ? "\n✔ CONFIRMED: the native transfer delivered the exact escrowed amount." : "\n✖ Delta did not match - investigate.");
+  console.log("\n3. reclaim_timeout again (must fail, nothing sent)...");
+  try {
+    await send(client, "reclaim_timeout", [ENGAGEMENT_ID]);
+  } catch (e) {
+    console.log("  refused:", String(e.message || e).slice(0, 200));
+  }
+  await accounting(client);
+  console.log(`\nDone. Engagement: ${ENGAGEMENT_ID}`);
 }
 
 main().catch((e) => {

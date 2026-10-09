@@ -426,87 +426,118 @@ def test_release_wrong_status_fails(direct_vm, direct_deploy, direct_alice, dire
 
 
 # ---------------------------------------------------------------------------
-# retry_payout
+# exactly-once payouts and accounting
 # ---------------------------------------------------------------------------
 
 
-def test_release_records_pending_payout_for_retry(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """emit_transfer can fail to land independently of this call (a known,
-    acknowledged platform issue - see _Recipient's docstring), so every
-    payout site must leave the owed amount retriable rather than only ever
-    attempting delivery once."""
+def _capture_sends(direct_vm):
+    """Record every transfer the contract emits, as (recipient_hex, value)."""
+    sends = []
+
+    def hook(vm, request):
+        if isinstance(request, dict) and "EthSend" in request:
+            send = request["EthSend"]
+            sends.append((send["address"].as_hex.lower(), int(send["value"])))
+        return None
+
+    direct_vm._gl_call_hook = hook
+    return sends
+
+
+def _hex(addr_bytes):
+    return ("0x" + addr_bytes.hex()).lower()
+
+
+def test_release_emits_exactly_one_transfer_and_cannot_repeat(direct_vm, direct_deploy, direct_alice, direct_bob):
     contract = direct_deploy(CONTRACT)
+    sends = _capture_sends(direct_vm)
     direct_vm.warp(T0)
     _to_verified(direct_vm, contract, direct_alice, direct_bob)
     direct_vm.warp("2026-01-01T00:15:00Z")
     contract.release("wp-1")
+    with direct_vm.expect_revert("not verified"):
+        contract.release("wp-1")
 
-    contract.retry_payout("wp-1")  # must not revert - payout still on record
-    assert contract.get_pending_payout("wp-1") == 1000
+    assert sends == [(_hex(direct_bob), 1000)]
+    assert contract.get_payout("wp-1") == 1000
 
 
-def test_reclaim_timeout_records_pending_payout_for_retry(direct_vm, direct_deploy, direct_alice, direct_bob):
+def test_reclaim_timeout_emits_exactly_one_transfer_and_cannot_repeat(
+    direct_vm, direct_deploy, direct_alice, direct_bob
+):
     contract = direct_deploy(CONTRACT)
+    sends = _capture_sends(direct_vm)
     direct_vm.warp(T0)
     _create(direct_vm, contract, direct_alice, direct_bob, deadline=T0_TS + 100)
     direct_vm.warp("2026-01-01T00:05:00Z")
     direct_vm.sender = direct_alice
     contract.reclaim_timeout("wp-1")
+    with direct_vm.expect_revert("not awaiting submission"):
+        contract.reclaim_timeout("wp-1")
 
-    contract.retry_payout("wp-1")
+    assert sends == [(_hex(direct_alice), 1000)]
 
 
-def test_retry_payout_without_a_pending_payout_fails(direct_vm, direct_deploy, direct_alice, direct_bob):
+def test_settled_dispute_cannot_be_paid_again_by_any_path(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """The steward's duplicate-delivery case, across every payout path: once
+    an engagement is settled, no call emits a second transfer."""
+    contract = direct_deploy(CONTRACT)
+    sends = _capture_sends(direct_vm)
+    direct_vm.warp(T0)
+    _to_verified(direct_vm, contract, direct_alice, direct_bob)
+    direct_vm.sender = direct_alice
+    contract.challenge("wp-1", "Doesn't look right to me")
+    _mock_dispute_llm(direct_vm, verdict="uphold")
+    contract.resolve_dispute("wp-1")
+
+    direct_vm.warp("2026-01-03T00:00:00Z")  # past every timeout
+    for call in (
+        lambda: contract.resolve_dispute("wp-1"),
+        lambda: contract.release("wp-1"),
+        lambda: contract.reclaim_timeout("wp-1"),
+        lambda: contract.reclaim_stale("wp-1"),
+    ):
+        with direct_vm.expect_revert():
+            call()
+
+    assert sends == [(_hex(direct_bob), 1000)]
+
+
+def test_no_retry_entry_point_exists(direct_vm, direct_deploy):
+    """Re-sending a payout that is merely slow to finalize is how duplicate
+    delivery happened; there is deliberately no method that re-sends."""
+    contract = direct_deploy(CONTRACT)
+    assert not hasattr(contract, "retry_payout")
+
+
+def test_accounting_tracks_a_payout_until_it_lands(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy(CONTRACT)
+    _capture_sends(direct_vm)
+    direct_vm.warp(T0)
+    _to_verified(direct_vm, contract, direct_alice, direct_bob)
+    me = direct_vm._contract_address
+
+    direct_vm.deal(me, 1000)  # the escrow is held
+    acct = contract.get_accounting()
+    assert (acct["total_escrowed"], acct["unscheduled"], acct["in_flight"], acct["shortfall"]) == (1000, 1000, 0, 0)
+
+    direct_vm.warp("2026-01-01T00:15:00Z")
+    contract.release("wp-1")
+    acct = contract.get_accounting()  # scheduled, transaction not final yet
+    assert (acct["total_scheduled"], acct["unscheduled"], acct["in_flight"]) == (1000, 0, 1000)
+
+    direct_vm.deal(me, 0)  # the transfer landed on finalization
+    acct = contract.get_accounting()
+    assert (acct["in_flight"], acct["shortfall"]) == (0, 0)
+
+
+def test_accounting_reports_a_shortfall(direct_vm, direct_deploy, direct_alice, direct_bob):
     contract = direct_deploy(CONTRACT)
     direct_vm.warp(T0)
     _create(direct_vm, contract, direct_alice, direct_bob)
-
-    with direct_vm.expect_revert("No pending payout"):
-        contract.retry_payout("wp-1")
-
-
-def test_retry_payout_ignores_recipient_balance(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """A steward-caught design flaw: using the recipient's wallet balance
-    as proof of delivery can both duplicate an already-delivered transfer
-    and silently "clear" a payout that never actually landed. Retry is now
-    deliberately blind to balance - it stays on record and keeps counting
-    toward MAX_RETRIES no matter what the recipient's wallet holds."""
-    contract = direct_deploy(CONTRACT)
-    direct_vm.warp(T0)
-    _to_verified(direct_vm, contract, direct_alice, direct_bob)
-    direct_vm.warp("2026-01-01T00:15:00Z")
-    contract.release("wp-1")
-
-    direct_vm.deal(direct_bob, 10**18)  # a huge unrelated balance bump
-    contract.retry_payout("wp-1")  # still retries, not silently treated as "delivered"
-    assert contract.get_pending_payout("wp-1") == 1000
-
-
-def test_retry_payout_by_non_recipient_fails(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
-    contract = direct_deploy(CONTRACT)
-    direct_vm.warp(T0)
-    _to_verified(direct_vm, contract, direct_alice, direct_bob)
-    direct_vm.warp("2026-01-01T00:15:00Z")
-    contract.release("wp-1")
-
-    direct_vm.sender = direct_charlie  # not the provider
-    with direct_vm.expect_revert("Only the recipient may retry"):
-        contract.retry_payout("wp-1")
-
-
-def test_retry_payout_bounded_by_max_retries(direct_vm, direct_deploy, direct_alice, direct_bob):
-    contract = direct_deploy(CONTRACT)
-    direct_vm.warp(T0)
-    _to_verified(direct_vm, contract, direct_alice, direct_bob)
-    direct_vm.warp("2026-01-01T00:15:00Z")
-    contract.release("wp-1")
-
-    for _ in range(3):  # MAX_RETRIES
-        contract.retry_payout("wp-1")
-    assert contract.get_retry_count("wp-1") == 3
-
-    with direct_vm.expect_revert("Retry limit"):
-        contract.retry_payout("wp-1")
+    direct_vm.deal(direct_vm._contract_address, 400)
+    acct = contract.get_accounting()
+    assert (acct["in_flight"], acct["shortfall"]) == (0, 600)
 
 
 # ---------------------------------------------------------------------------

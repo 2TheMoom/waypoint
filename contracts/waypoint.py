@@ -9,7 +9,6 @@ RECOVERY_TIMEOUT_SECONDS = 86400  # 24h - a stuck engagement unwinds after this
 MAX_DELIVERABLE_DESCRIPTION_LENGTH = 2000
 MIN_DISPUTE_REASON_LENGTH = 20
 MAX_DISPUTE_REASON_LENGTH = 2000
-MAX_RETRIES = 3  # bounds worst-case exposure to (1 + MAX_RETRIES)x the owed amount
 
 REQUEST_HEADERS = {
     "Accept": "text/html,application/json,*/*",
@@ -19,9 +18,10 @@ REQUEST_HEADERS = {
 
 @gl.evm.contract_interface
 class Payee:
-    """Documented chain-layer path to pay a wallet. Can still fail to land
-    on today's Bradbury (genvm-manager#20, ack'd, node-side fix pending) -
-    see pending_payouts/retry_payout."""
+    """Documented chain-layer path to pay a wallet (an external message).
+    External messages always execute on finalization of the transaction
+    that emitted them, never earlier, and are dropped with it if that
+    transaction is rejected or overturned."""
 
     class View:
         pass
@@ -74,19 +74,23 @@ class Waypoint(gl.Contract):
 
     reclaim_stale() recovers an engagement stuck past
     RECOVERY_TIMEOUT_SECONDS. resolve_dispute() is permissionless so an
-    uncooperative provider can't strand a dispute. _pay() can fail to land
-    independently of the call - pending_payouts records the owed amount;
-    retry_payout() re-attempts, bounded by MAX_RETRIES and callable only
-    by the actual recipient. GenVM exposes no signal that can confirm
-    delivery, so retry is deliberately blind rather than inferring
-    "already delivered" from the recipient's balance, which can both miss
-    a genuine failure (an unrelated balance rise) and duplicate a genuine
-    success (a delayed balance update)."""
+    uncooperative provider can't strand a dispute.
+
+    Payouts are exactly-once by construction. Every payout path requires a
+    non-terminal status and moves the engagement to released or refunded
+    in the same transaction that records the amount in `payouts` and emits
+    the transfer, so an engagement can be paid at most once. The transfer
+    lands when that transaction finalizes; if the transaction is rejected
+    or overturned, the status change and the transfer are dropped together.
+    A transfer that is slow to land is never re-sent, which is what
+    previously allowed duplicate delivery. get_accounting() reconciles the
+    ledger against the contract's real balance, read-only."""
 
     engagements: TreeMap[str, Engagement]
     engagement_ids: DynArray[str]
-    pending_payouts: TreeMap[str, u256]  # engagement_id -> amount still owed/retriable
-    retry_count: TreeMap[str, u256]  # engagement_id -> number of retry_payout attempts so far
+    payouts: TreeMap[str, u256]  # engagement_id -> amount scheduled, written exactly once
+    total_escrowed: u256  # every wei that entered through create_engagement()
+    total_scheduled: u256  # every wei ever scheduled out through _payout()
 
     def __init__(self):
         pass
@@ -100,35 +104,10 @@ class Waypoint(gl.Contract):
         return self.engagements[engagement_id]
 
     def _payout(self, engagement_id: str, recipient: Address, amount: u256) -> None:
-        self.pending_payouts[engagement_id] = amount
-        _pay(recipient, amount)
-
-    @gl.public.write
-    def retry_payout(self, engagement_id: str) -> None:
-        """A steward-caught design flaw, not just a bug: using the
-        recipient's wallet balance as proof of delivery is unsound in both
-        directions - a delayed balance update can make a landed transfer
-        look undelivered (duplicating it), and an unrelated balance rise
-        can make a lost transfer look delivered (silently losing it).
-        GenVM exposes no other signal to confirm delivery, so retry is now
-        blind: bounded only by MAX_RETRIES, and restricted to the actual
-        recipient so nobody else can spend down another party's retries."""
-        e = self._get(engagement_id)
-        amount = self.pending_payouts.get(engagement_id, u256(0))
-        if amount == 0:
-            raise gl.vm.UserError("No pending payout for this engagement")
-        if e.status == "released":
-            recipient = e.provider
-        elif e.status == "refunded":
-            recipient = e.client
-        else:
-            raise gl.vm.UserError(f"Engagement has no settled payout to retry (status: {e.status})")
-        if gl.message.sender_address != recipient:
-            raise gl.vm.UserError("Only the recipient may retry")
-        count = self.retry_count.get(engagement_id, u256(0))
-        if count >= MAX_RETRIES:
-            raise gl.vm.UserError(f"Retry limit ({MAX_RETRIES}) reached for this engagement")
-        self.retry_count[engagement_id] = count + 1
+        """The only place a transfer is emitted; every caller has just moved
+        the engagement to a terminal status in the same transaction."""
+        self.payouts[engagement_id] = amount
+        self.total_scheduled += amount
         _pay(recipient, amount)
 
     @gl.public.write.payable
@@ -184,6 +163,7 @@ class Waypoint(gl.Contract):
             resolution_note="",
         )
         self.engagement_ids.append(engagement_id)
+        self.total_escrowed += value
 
     @gl.public.write
     def submit(self, engagement_id: str) -> None:
@@ -405,9 +385,23 @@ class Waypoint(gl.Contract):
         return list(self.engagement_ids)
 
     @gl.public.view
-    def get_pending_payout(self, engagement_id: str) -> u256:
-        return self.pending_payouts.get(engagement_id, u256(0))
+    def get_payout(self, engagement_id: str) -> u256:
+        return self.payouts.get(engagement_id, u256(0))
 
     @gl.public.view
-    def get_retry_count(self, engagement_id: str) -> u256:
-        return self.retry_count.get(engagement_id, u256(0))
+    def get_accounting(self) -> dict:
+        """Read-only reconciliation. Everything escrowed and not yet
+        scheduled is still owed to someone, so the balance must cover it;
+        anything above that is scheduled payouts still waiting for their
+        transaction to finalize. in_flight returning to 0 means every
+        scheduled payout has landed. Nothing here can trigger a transfer."""
+        balance = int(self.balance)
+        unscheduled = int(self.total_escrowed) - int(self.total_scheduled)
+        return {
+            "balance": balance,
+            "total_escrowed": int(self.total_escrowed),
+            "total_scheduled": int(self.total_scheduled),
+            "unscheduled": unscheduled,
+            "in_flight": max(balance - unscheduled, 0),
+            "shortfall": max(unscheduled - balance, 0),
+        }

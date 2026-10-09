@@ -54,7 +54,7 @@ recipient type.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0x56BaaeeCD1A163F29cc9868B75B61a4Ee3AeA976`](https://explorer-bradbury.genlayer.com/address/0x56BaaeeCD1A163F29cc9868B75B61a4Ee3AeA976)
+- **Contract:** [`0x1d30EDaf43d1f044A638a0ED2fD6AD3783b3AA37`](https://explorer-bradbury.genlayer.com/address/0x1d30EDaf43d1f044A638a0ED2fD6AD3783b3AA37)
 - **Frontend:** https://waypoint-frontend-one.vercel.app
 - Verified via 52 passing direct-mode tests (`python -m pytest tests/direct/`),
   covering the full lifecycle (funded → submitted → verified → released,
@@ -95,58 +95,61 @@ Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
     The deterministic majority of Waypoint's surface (everything except
     the dispute-escalation path) is fully proven live end-to-end.
 
-### Second steward round: payout reconciliation and dispute-reason floor
-A later steward pass found the `Payee` fix alone insufficient: every
-payout site treated a silent `emit_transfer` as delivery with no way back
-if it failed to land, and `challenge()` accepted any non-empty reason,
-down to a single trivial word, for a dispute that then escalates to real
-LLM adjudication. Fixed with one shared `_payout()` helper that records
-the owed amount in `pending_payouts` before every `release`/
-`reclaim_timeout`/`resolve_dispute`/`reclaim_stale` payout, plus a single
-`retry_payout(engagement_id)` that re-attempts delivery to whichever
-status (`released`/`refunded`) the engagement already settled at; and by
-adding `MIN_DISPUTE_REASON_LENGTH` (20 characters) alongside the existing
-maximum.
+### Payouts are delivered exactly once, by construction
+A steward rejected the previous design because a retry cap "bounds the
+resulting exposure but does not prevent duplicate delivery". That was
+correct, and it applied to every retry variant this repo tried (blind,
+balance-checked, capped). The fix is to remove retry entirely, because
+it was never needed:
 
-### Third steward round: a real fund-safety bug in the retry itself
-This fix was still wrong: `pending_payouts` was never cleared after a
-successful delivery, so a provider/client whose payout actually landed
-could call `retry_payout` again anyway, firing a second real transfer of
-the same amount and consuming GEN owed to other engagements - an
-unbounded drain, not a rare edge case, and the steward caught it
-correctly. Fixed with a `pending_floor` snapshot: the recipient's balance
-is recorded right before the first attempt, and `retry_payout` now reads
-the recipient's *current* balance and compares it against `floor +
-amount` - if the payout already landed, it clears `pending_payouts` and
-refuses instead of re-sending. `test_retry_payout_blocked_once_balance_
-confirms_delivery` proves this directly (simulates delivery via the
-direct-mode harness's `deal()`, confirms retry refuses and the record is
-actually cleared, not just blocked once). 50 tests pass, lint clean.
-Redeployed: `0xF9C9CC08826E464a5Dd177B739e1E7054CA43Aa1`.
+- **A payment to a wallet only executes when the transaction that emitted
+  it finalizes** (GenLayer docs: external messages "always execute on
+  finalization" and cannot be emitted on acceptance). If that transaction
+  is rejected or overturned, the message is dropped with it.
+- Every payout path (`release`, `reclaim_timeout`, `resolve_dispute`,
+  `reclaim_stale`) requires a non-terminal status and moves the
+  engagement to `released` or `refunded` **in the same transaction** that
+  records the amount in `payouts` and emits the transfer. Either all of
+  it happens or none of it does, and a settled engagement can't reach any
+  payout path again. No `retry_payout` exists.
+- The failures previously blamed on the platform fit this model exactly:
+  a payout that "never arrived" was waiting for its transaction to
+  finalize (one landed hours later, on its own), and the other failure
+  mode rejected the whole transaction, so nothing was recorded or sent.
+  Re-sending a payout that was merely slow is what created the
+  duplicate-delivery risk.
 
-A real end-to-end `create_engagement → submit → verify → release` cycle
-against the current address, isolating whether `Payee`'s payout is
-*reliable* rather than merely possible, needs a payable transaction - the
-bare `genlayer write` CLI has no flag for attaching native value to a
-call at all (`--fee-value` is the consensus fee deposit, not the call's
-value). A ready-to-run script (`verify-payee-live.mjs`, `genlayer-js`
-with real `value:`) is included in this repo for whoever holds the
-deployer key to run directly.
+`get_accounting()` reconciles the ledger against the contract's real
+balance, read-only: `unscheduled` (escrowed, not yet paid out, still owed
+to someone), `in_flight` (scheduled, waiting for finality), and
+`shortfall`. `in_flight` returning to 0 means every scheduled payout has
+landed. Nothing in it can trigger a transfer, so a misleading balance
+can't cause a payment. One honest caveat: a read taken seconds after a
+value-bearing transaction can briefly see the new balance before the
+stored totals catch up, overstating `in_flight` for a moment (seen once in
+the live run below, consistent on the next read).
 
-### Fourth steward round: the balance check itself was unsound
-The `pending_floor` balance check above was still wrong in both
-directions, not just unbounded: a delayed balance update can make a
-transfer that already landed look undelivered (firing a duplicate), and
-an unrelated balance rise (a provider or client receiving unrelated GEN)
-can make a transfer that never landed look delivered, silently losing it
-forever - GenVM exposes no other signal to confirm delivery. Removed the
-balance check entirely. `retry_payout` is now blind: it always resends up
-to `MAX_RETRIES`, restricted to the actual recipient
-(`gl.message.sender_address != recipient` reverts) so nobody else can
-spend down another party's retry budget. `test_retry_payout_ignores_
-recipient_balance` and `test_retry_payout_by_non_recipient_fails` cover
-both properties directly. 52 tests pass, lint clean, 18,383 bytes.
-Redeployed: `0x56BaaeeCD1A163F29cc9868B75B61a4Ee3AeA976`.
+Tests count every transfer the contract actually emits (`EthSend`), not
+just state: `release` and `reclaim_timeout` each emit exactly one transfer
+and can't repeat, and once a dispute settles, every payout path
+(`resolve_dispute`, `release`, `reclaim_timeout`, `reclaim_stale`) is
+refused with nothing emitted. Mutation-checked: removing any of the status
+guards, the terminal status change, the payout record, either running
+total, or making `_payout` pay twice each fails a test.
+
+### Live-verified exactly-once payout (current deployment)
+Engagement `wp-once-1791545405997`, a dedicated test wallet, real GEN:
+
+| Step | Transaction | Result |
+|---|---|---|
+| `create_engagement`, 0.01 GEN escrowed | `0x9557f670...` | accounting: escrowed 0.01, unscheduled 0.01 |
+| `reclaim_timeout` after the deadline | `0xb4e61a1b...` | **exactly one** message: 0.01 GEN to the client, `onAcceptance: false`; accounting: scheduled 0.01, in flight 0.01 |
+| `reclaim_timeout` again | `0xe73c54a5...` | `FINISHED_WITH_ERROR` ("not awaiting submission (status: refunded)"), **no messages** |
+| reclaim transaction finalizes (~28 min after acceptance) | `0xb4e61a1b...` | `FINALIZED`; on that same poll the contract balance went 0.01 to 0, the client's balance rose by exactly 0.01 GEN, `in_flight` returned to 0. Delivered once. |
+
+Script: `verify-payee-live.mjs`, then `watch-finality.mjs` for the
+landing. Earlier steward rounds and the abandoned retry designs are in
+the git history.
 
 ## What's included
 - `contracts/waypoint.py` — the Waypoint Intelligent Contract
