@@ -5,6 +5,7 @@ import { useWallet } from "@/lib/genlayer/wallet";
 import { GENLAYER_NETWORK } from "@/lib/genlayer/client";
 import { error, userRejected } from "@/lib/utils/toast";
 import { CairnGlyph } from "./CairnGlyph";
+import { isMobileUserAgent, metamaskAppLink } from "@/lib/wallet-links";
 
 const METAMASK_INSTALL_URL = "https://metamask.io/download/";
 
@@ -64,6 +65,8 @@ export function AccountPanel() {
     }
   };
 
+  const onMobile = typeof navigator !== "undefined" && isMobileUserAgent(navigator.userAgent);
+  const walletAppLink = typeof window !== "undefined" ? metamaskAppLink(window.location.host, window.location.pathname) : METAMASK_INSTALL_URL;
   const instrumentLabel = isMetaMaskInstalled ? "MetaMask · detected" : "Not found";
   const instrumentTone = isMetaMaskInstalled ? "moss" : "rust";
   const datumLabel = !isConnected
@@ -86,14 +89,14 @@ export function AccountPanel() {
         className="wallet-chip"
       >
         <span className={`mark-dot ${isConnected ? "" : "off"}`} />
-        {isConnected && address ? `0x${address.slice(2, 6)}…${address.slice(-4)}` : "Register Instrument"}
+        {isConnected && address ? `0x${address.slice(2, 6)}…${address.slice(-4)}` : (<><span className="sm:hidden">Register</span><span className="hidden sm:inline">Register Instrument</span></>)}
       </button>
 
       {isPanelOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsPanelOpen(false)} />
           <div
-            className="fixed left-4 right-4 sm:left-auto sm:right-5 top-[86px] z-50 sm:w-[300px] p-5"
+            className="fixed left-4 right-4 sm:left-auto sm:right-5 top-[86px] z-50 sm:w-[300px] p-5 max-h-[calc(100dvh-106px)] overflow-y-auto"
             style={{ background: "var(--card)", border: "1px solid var(--border-bright)" }}
           >
             <div className="eyebrow mb-4">Field Registration</div>
@@ -109,7 +112,12 @@ export function AccountPanel() {
             </div>
 
             <div className="flex flex-col gap-2">
-              {!isMetaMaskInstalled && (
+              {!isMetaMaskInstalled && onMobile && (
+                <a href={walletAppLink} className="btn-field solid w-full text-center">
+                  Open in MetaMask
+                </a>
+              )}
+              {!isMetaMaskInstalled && !onMobile && (
                 <button type="button" onClick={() => window.open(METAMASK_INSTALL_URL, "_blank")} className="btn-field solid w-full">
                   Install MetaMask
                 </button>
