@@ -69,6 +69,10 @@ rather than a generic modal dialog.
 - **Release / Reclaim**: pay the provider once the challenge window
   passes, or let the client reclaim the escrow if the provider never
   submitted by the deadline
+- **Recover stuck engagements**: after 24 hours, a stuck submission can be
+  refunded to the client (client only), and a stuck dispute can be released
+  to the provider by any connected account. Resolve Dispute is likewise
+  available to any connected account, matching the contract.
 - **Trail visualization**: every engagement's real on-chain lifecycle
   rendered as a cairn-marked trail, plus a log of every engagement on the
   contract

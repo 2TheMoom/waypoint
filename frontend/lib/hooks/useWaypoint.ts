@@ -180,6 +180,15 @@ export function useRelease() {
   );
 }
 
+export function useReclaimStale() {
+  return useWriteAction<{ id: string }>(
+    (c, a, fee, cb) => c.reclaimStale(a.id, fee, cb),
+    { title: "Recovered", description: "The stuck engagement was settled on-chain." },
+    "Failed to recover the engagement",
+    (a) => a.id
+  );
+}
+
 export function useReclaimTimeout() {
   return useWriteAction<{ id: string }>(
     (c, a, fee, cb) => c.reclaimTimeout(a.id, fee, cb),

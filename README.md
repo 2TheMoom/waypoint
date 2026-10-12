@@ -31,9 +31,10 @@ consensus-critical; the reasoning text is informational. If nobody
 disputes within the window, `release()` pays the provider. If the provider
 never submits by the deadline, `reclaim_timeout()` lets the client recover
 the escrow - and `reclaim_stale()` covers the two states that can
-otherwise strand the escrow forever: submitted but never verified, or
-disputed with nobody willing to trigger resolution (which is itself now
-permissionless, not provider-only, for the same reason).
+otherwise strand the escrow forever: submitted but never verified (client
+only, refunds the client), or disputed with adjudication stuck (anyone can
+trigger it, and it releases to the provider). `resolve_dispute()` is
+itself permissionless, not provider-only, for the same reason.
 
 **Payouts and refunds go through `gl.evm.contract_interface` (`Payee`),
 not `gl.get_contract_at()`.** Clients and providers are EOAs (plain
@@ -249,10 +250,16 @@ The app will be available at http://localhost:3000/.
    window has passed with no dispute.
 7. **`reclaim_timeout(engagement_id)`** — client-only, if the provider
    never submitted by the deadline.
-8. **`reclaim_stale(engagement_id)`** — client-only recovery for an
-   engagement stuck 24 hours past deadline and still `submitted` (the
-   marker never appeared), or past `disputed_at` and still `disputed`
-   (adjudication never reached a clear verdict).
+8. **`reclaim_stale(engagement_id)`**: recovery for an engagement stuck
+   for 24 hours, with different access depending on the case:
+   - **Stuck submission** (24 hours past the deadline and still
+     `submitted`, so the marker never appeared): **client-only**, and it
+     refunds the client.
+   - **Stuck dispute** (24 hours past `disputed_at` and still `disputed`,
+     so adjudication never reached a clear verdict): **permissionless**.
+     It falls back to the already-verified result and releases to the
+     provider, so the provider doesn't depend on the disputing client to
+     trigger it.
 9. **`get_engagement`** / **`get_all_engagement_ids`** — read back an
    engagement's full state, or enumerate every engagement on the contract.
 
@@ -262,6 +269,7 @@ The app will be available at http://localhost:3000/.
 |-----------|---------|-------|-----------------|
 | **Lint** | `genvm-lint check contracts/waypoint.py` | ~250ms | No |
 | **Direct** | `python -m pytest tests/direct/ -v` | ~ms/test | No |
+| **Frontend logic** | `cd frontend && npm test` | ~ms/test | No |
 
 ## Community
 - **[Discord](https://discord.gg/8Jm4v89VAu)**: Discussions, support, and announcements

@@ -22,6 +22,7 @@ export interface Engagement {
   created_at: string;
   submitted_at: string;
   verified_at: string;
+  disputed_at: string; // unix seconds, "0" until challenged
   dispute_reason: string;
   resolution_note: string;
   challenge_deadline: string;

@@ -1,46 +1,13 @@
 import { createClient } from "genlayer-js";
 import { getGenLayerChain } from "../genlayer/chains";
 import type { Engagement } from "./types";
+import { decodeEngagement } from "./decode";
 import {
   estimateWriteFeePreset,
   feePresetToTransactionFees,
   type FeePresetEstimate,
   type FeePresetLevel,
 } from "../genlayer/fees";
-
-/**
- * genlayer-js decodes Python dicts (and dataclasses) as JS Map instances,
- * keyed by field name. This flattens one level of the Map into a plain
- * object.
- */
-function toPlainObject(raw: any): Record<string, any> {
-  const entries = raw instanceof Map ? Array.from(raw.entries()) : Object.entries(raw ?? {});
-  const obj: Record<string, any> = {};
-  for (const [key, value] of entries) {
-    obj[key] = value;
-  }
-  return obj;
-}
-
-function decodeEngagement(raw: any): Engagement {
-  const obj = toPlainObject(raw);
-  return {
-    client: String(obj.client ?? ""),
-    provider: String(obj.provider ?? ""),
-    deliverable_description: String(obj.deliverable_description ?? ""),
-    verification_url: String(obj.verification_url ?? ""),
-    verification_marker: String(obj.verification_marker ?? ""),
-    amount: String(obj.amount ?? "0"),
-    deadline: String(obj.deadline ?? "0"),
-    status: String(obj.status ?? "funded") as Engagement["status"],
-    created_at: String(obj.created_at ?? "0"),
-    submitted_at: String(obj.submitted_at ?? "0"),
-    verified_at: String(obj.verified_at ?? "0"),
-    dispute_reason: String(obj.dispute_reason ?? ""),
-    resolution_note: String(obj.resolution_note ?? ""),
-    challenge_deadline: String(obj.challenge_deadline ?? "0"),
-  };
-}
 
 /**
  * Waypoint contract class - a verified milestone escrow. create_engagement
@@ -195,6 +162,14 @@ class Waypoint {
 
   async reclaimTimeout(engagementId: string, feePreset?: FeePresetEstimate, onSubmitted?: (txHash: string) => void) {
     return this.submitWrite("reclaim_timeout", [engagementId], feePreset, onSubmitted);
+  }
+
+  async estimateReclaimStaleFees(engagementId: string, level: FeePresetLevel = "standard") {
+    return this.estimateFees("reclaim_stale", [engagementId], level);
+  }
+
+  async reclaimStale(engagementId: string, feePreset?: FeePresetEstimate, onSubmitted?: (txHash: string) => void) {
+    return this.submitWrite("reclaim_stale", [engagementId], feePreset, onSubmitted);
   }
 }
 

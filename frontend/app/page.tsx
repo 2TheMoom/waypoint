@@ -14,6 +14,7 @@ import {
   useResolveDispute,
   useRelease,
   useReclaimTimeout,
+  useReclaimStale,
 } from "@/lib/hooks/useWaypoint";
 import {
   Dialog,
@@ -26,6 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Engagement } from "@/lib/contracts/types";
+import { availableActions, staleKind, staleOutcome } from "@/lib/engagement-actions";
 
 const CHALLENGE_WINDOW_SECONDS = 600;
 
@@ -33,11 +35,6 @@ function shortAddr(hex: string): string {
   if (!hex) return "—";
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
   return `0x${clean.slice(0, 4)}…${clean.slice(-4)}`;
-}
-
-function sameAddr(a: string | null | undefined, b: string | null | undefined): boolean {
-  if (!a || !b) return false;
-  return a.toLowerCase() === b.toLowerCase();
 }
 
 function formatGen(wei: string): string {
@@ -260,6 +257,7 @@ function EngagementHero({ id }: { id: string }) {
   const resolveAction = useResolveDispute();
   const releaseAction = useRelease();
   const reclaimAction = useReclaimTimeout();
+  const staleAction = useReclaimStale();
 
   if (isLoading) {
     return <div className="p-8 text-center font-mono text-sm" style={{ color: "var(--ink-faint)" }}>Loading engagement…</div>;
@@ -272,12 +270,11 @@ function EngagementHero({ id }: { id: string }) {
     );
   }
 
-  const isClient = sameAddr(address, e.client);
-  const isProvider = sameAddr(address, e.provider);
+  const actions = availableActions(e, { address, now });
+  const stale = staleKind(e, now);
   const trail = buildTrail(e);
   const challengeCloses = Number(e.challenge_deadline);
   const challengeOpen = e.status === "verified" && now < challengeCloses;
-  const deadlinePassed = now > Number(e.deadline);
 
   return (
     <div className="p-7 sm:p-8" style={{ background: "var(--card)", border: "1px solid var(--border-bright)" }}>
@@ -340,34 +337,46 @@ function EngagementHero({ id }: { id: string }) {
       </div>
 
       <div className="flex gap-3 flex-wrap mt-6 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
-        {e.status === "funded" && isProvider && !deadlinePassed && (
+        {actions.includes("submit") && (
           <button className="btn-field solid" disabled={submitAction.isPending} onClick={() => submitAction.run({ id })}>
             {submitAction.isPending ? "Submitting…" : "Mark As Submitted"}
           </button>
         )}
-        {e.status === "funded" && isClient && deadlinePassed && (
+        {actions.includes("reclaim_timeout") && (
           <button className="btn-field danger" disabled={reclaimAction.isPending} onClick={() => reclaimAction.run({ id })}>
             {reclaimAction.isPending ? "Reclaiming…" : "Reclaim Escrow"}
           </button>
         )}
-        {e.status === "submitted" && (
+        {actions.includes("verify") && (
           <button className="btn-field solid" disabled={verifyAction.isPending} onClick={() => verifyAction.run({ id })}>
             {verifyAction.isPending ? "Verifying…" : "Verify Now"}
           </button>
         )}
-        {e.status === "verified" && !challengeOpen && (
+        {actions.includes("release") && (
           <button className="btn-field solid" disabled={releaseAction.isPending} onClick={() => releaseAction.run({ id })}>
             {releaseAction.isPending ? "Releasing…" : "Release Now"}
           </button>
         )}
-        {e.status === "verified" && challengeOpen && isClient && <ChallengeDialog engagementId={id} />}
-        {e.status === "disputed" && isProvider && (
+        {actions.includes("challenge") && <ChallengeDialog engagementId={id} />}
+        {actions.includes("resolve_dispute") && (
           <button className="btn-field danger" disabled={resolveAction.isPending} onClick={() => resolveAction.run({ id })}>
             {resolveAction.isPending ? "Resolving…" : "Resolve Dispute"}
           </button>
         )}
+        {actions.includes("reclaim_stale") && stale && (
+          <button className="btn-field danger" disabled={staleAction.isPending} onClick={() => staleAction.run({ id })}>
+            {staleAction.isPending ? "Recovering…" : staleOutcome(stale).label}
+          </button>
+        )}
         {!address && <span className="font-mono text-xs self-center" style={{ color: "var(--ink-faint)" }}>Register your instrument above to act on this engagement.</span>}
       </div>
+
+      {stale && (
+        <div className="mt-4 flex items-start gap-2 font-mono text-xs" style={{ color: "var(--rust)" }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--rust)", marginTop: 5 }} />
+          {staleOutcome(stale).note}
+        </div>
+      )}
 
       {challengeOpen && (
         <div className="mt-4 flex items-center gap-2 font-mono text-xs" style={{ color: "var(--rust)" }}>
