@@ -1,0 +1,598 @@
+{
+ "contract": "0x15f975aD3Ce54596A73b999b0c85Fd63e0eF8C9c",
+ "run": "mv6q5wdt",
+ "started": "2026-10-13T13:36:44.915Z",
+ "events": [
+  {
+   "t": "2026-10-13T13:36:47.484Z",
+   "scenario": "overturn",
+   "msg": "create_engagement send failed (Transaction reverted: EVM tx 0x97df5cb707e4c90b7d2cc13abd32782ec389c07), retry 1"
+  },
+  {
+   "t": "2026-10-13T13:36:47.614Z",
+   "scenario": "misleading",
+   "msg": "create_engagement send failed (Transaction reverted: EVM tx 0x70ae677a740cfda6e248e23281eca6942199e8b), retry 1"
+  },
+  {
+   "t": "2026-10-13T13:37:18.056Z",
+   "scenario": "misleading",
+   "msg": "create_engagement 0xb1a00157c7 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0xb1a00157c76431b41404b9d9579d1bd298298512a4d68af34f76d1f50fcbd0d2",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:37:33.985Z",
+   "scenario": "overturn",
+   "msg": "create_engagement 0x0273329c7d exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0x0273329c7db719f6026b398ff03478184135b06602f12bd0e8ec2dbbfa16cde5",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:37:49.727Z",
+   "scenario": "uphold",
+   "msg": "create_engagement 0x9b37b2fa4e exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0x9b37b2fa4eca277565472141fcbad8aa131589fc974fbe13148f82b6c6932692",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:38:00.595Z",
+   "scenario": "misleading",
+   "msg": "accept 0xab261c6732 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0xab261c6732b682a706f120c7b4ad0867659d7263855b9f1b365b2622c0fcdc8f",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:38:03.180Z",
+   "scenario": "overturn",
+   "msg": "accept send failed (Transaction reverted: EVM tx 0x6a112e005297fb5e05a334b46e9a229a2782c79), retry 1"
+  },
+  {
+   "t": "2026-10-13T13:38:09.720Z",
+   "scenario": "release",
+   "msg": "create_engagement 0x75ef6fd6ad exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0x75ef6fd6ad79e61a3b944ed2e025de11137f8d4cbee0c2608befbb5e8c8689af",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:38:23.932Z",
+   "scenario": "stale",
+   "msg": "create_engagement 0x17a04b54d6 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0x17a04b54d64826814cb3f318d1561c530d34b48b956844a6a560173dc9ea3664",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:38:38.475Z",
+   "scenario": "overturn",
+   "msg": "accept 0xa26c2a1c4b exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0xa26c2a1c4b73a32ff3c5f24d670dae5de59dd3f6dfd9a69b7a5b62c79cf3750b",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:39:22.050Z",
+   "scenario": "changed",
+   "msg": "create_engagement 0xf0215739d8 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0xf0215739d8460544b91ceedecb802140a164435bc9be3d5384348ffe47625fc3",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:39:30.168Z",
+   "scenario": "uphold",
+   "msg": "accept 0x538d668434 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0x538d66843445a129d475971a67b28aaca632a5deeaaa35478cdb34d57819af26",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:39:57.356Z",
+   "scenario": "misleading",
+   "msg": "submit 0x6e3b5b48a7 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0x6e3b5b48a7ab161bd895ec9de2b6268d2933ab2517689ee19497a321b9f9161e",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:40:13.979Z",
+   "scenario": "release",
+   "msg": "accept 0x54f80b3538 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0x54f80b3538494bca48dab11abbe6a6b29e59127e1bfb0934a630e37d8d50f1da",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:40:30.377Z",
+   "scenario": "misleading",
+   "msg": "verify 0xf3b883a7ab exec=FINISHED_WITH_ERROR result=AGREE",
+   "fn": "verify",
+   "hash": "0xf3b883a7ab896d05998f3cf541df532eede9de4eda803b5a0382e262a1ea5c7e",
+   "exec": "FINISHED_WITH_ERROR"
+  },
+  {
+   "t": "2026-10-13T13:40:43.868Z",
+   "scenario": "stale",
+   "msg": "accept 0x5eb352831a exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0x5eb352831a2cb15cf98927c50eedced6d83526bd7da7160b4e3565a835726fce",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:40:51.772Z",
+   "scenario": "misleading",
+   "msg": "negated line: verify exec=FINISHED_WITH_ERROR, status after = submitted, evidence recorded = \"\""
+  },
+  {
+   "t": "2026-10-13T13:40:57.396Z",
+   "scenario": "overturn",
+   "msg": "submit 0xdf9cc8bd80 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0xdf9cc8bd80e08af52176cb16f528d045eb1ef10c188c18818c7e52501af03772",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:41:11.207Z",
+   "scenario": "misleading",
+   "msg": "create_engagement 0x129be45867 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0x129be45867c7af3ce5998b289bd80d0bc4a5ae4ea7cce066f4b058e029591e5c",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:41:27.582Z",
+   "scenario": "changed",
+   "msg": "accept 0x856507ef6e exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0x856507ef6ec8e931b29c26e8e97c1148951d2c6737174a465851ef666a25d90e",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:41:41.189Z",
+   "scenario": "overturn",
+   "msg": "verify 0x44edd358fa exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "verify",
+   "hash": "0x44edd358fa728d4fda0efb80ed3ecab979e5f99ae3051e788b0f188df27eeeab",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:41:42.488Z",
+   "scenario": "overturn",
+   "msg": "verified, committed excerpt \"release notes | q3 pricing release shipped to production 2026 | known gap: the migration guide is not written yet and was not published with this release\" digest 0117a38742e744d6",
+   "excerpt": "release notes | q3 pricing release shipped to production 2026 | known gap: the migration guide is not written yet and was not published with this release",
+   "digest": "0117a38742e744d63e734b2b7fdcbfb0a7a73a721f54fb52c9668a433069abfa"
+  },
+  {
+   "t": "2026-10-13T13:41:51.989Z",
+   "scenario": "uphold",
+   "msg": "submit 0x430b8da303 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0x430b8da303aa64306d5b41ced08feb9811e3d5bf2faa2391cc0b30cadc833ec6",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:42:01.034Z",
+   "scenario": "overturn",
+   "msg": "challenge 0x050282743e exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "challenge",
+   "hash": "0x050282743e92dd779f936a45ace826a47d7c09851822b2df8c44f1c49f7294ff",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:42:15.631Z",
+   "scenario": "release",
+   "msg": "submit 0x04529a27e8 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0x04529a27e871f65a6401507c2b6dc901e322334d6f1d8ca7f7bfd7d8bbadaf99",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:42:30.011Z",
+   "scenario": "uphold",
+   "msg": "verify 0x997e79d57d exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "verify",
+   "hash": "0x997e79d57d455c5f7793af2c57a42c5227dd5a2d1e363f760a7c921fad593da6",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:42:31.311Z",
+   "scenario": "uphold",
+   "msg": "verified, committed excerpt \"release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate\" digest 52b328bce7005efb",
+   "excerpt": "release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate",
+   "digest": "52b328bce7005efb96d48718f9dcaddc5ec436369875deb4fcbf1de4b201de97"
+  },
+  {
+   "t": "2026-10-13T13:42:59.279Z",
+   "scenario": "overturn",
+   "msg": "resolve_dispute 0xc1992980ba exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "resolve_dispute",
+   "hash": "0xc1992980ba702f72355bbb692d406c6a10398ac21a186f58cbb89a595bde2572",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:43:20.520Z",
+   "scenario": "overturn",
+   "msg": "dispute resolved on attempt 1: status=refunded note=\"The committed evidence explicitly states that the migration guide was not written or published, failing to meet the requirement in the terms.\"",
+   "attempts": 1,
+   "status": "refunded",
+   "note": "The committed evidence explicitly states that the migration guide was not written or published, failing to meet the requirement in the terms."
+  },
+  {
+   "t": "2026-10-13T13:43:43.586Z",
+   "scenario": "stale",
+   "msg": "submit 0xcb3ee4b680 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0xcb3ee4b68011b91a0d5e1729dc2979915ca883fbea28c2a64bb15514e60af4b0",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:46:08.148Z",
+   "scenario": "release",
+   "msg": "verify 0x555ff804c9 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "verify",
+   "hash": "0x555ff804c9aeaff80710af680eb89743ef02660953fedf401025395f6b615968",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:46:10.710Z",
+   "scenario": "stale",
+   "msg": "verify send failed (Transaction reverted: EVM tx 0xa818954a094dfea18dd02984fc95955d4f5cf58), retry 1"
+  },
+  {
+   "t": "2026-10-13T13:46:21.499Z",
+   "scenario": "release",
+   "msg": "verified, committed excerpt \"release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate\" digest 52b328bce7005efb",
+   "excerpt": "release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate",
+   "digest": "52b328bce7005efb96d48718f9dcaddc5ec436369875deb4fcbf1de4b201de97"
+  },
+  {
+   "t": "2026-10-13T13:46:21.500Z",
+   "scenario": "release",
+   "msg": "challenge window open until 2026-10-13T14:42:31.000Z, waiting 58 min"
+  },
+  {
+   "t": "2026-10-13T13:46:26.291Z",
+   "scenario": "uphold",
+   "msg": "challenge 0xeac0496fb3 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "challenge",
+   "hash": "0xeac0496fb364859e30a8bbc70e25df20034d6f7eaffc48c18a1b8e49ffdf5662",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:46:36.779Z",
+   "scenario": "misleading",
+   "msg": "accept 0x5a9f293ef0 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0x5a9f293ef0ba5f3e3606d75013397d2584c73ab2237192a58ea052f09e2ae539",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:46:50.107Z",
+   "scenario": "stale",
+   "msg": "verify 0xa6462d0061 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "verify",
+   "hash": "0xa6462d00618b6d853ccb0f7f2b99e292e2933196a1e330b60ea7abff183f86d7",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:46:51.578Z",
+   "scenario": "stale",
+   "msg": "verified, committed excerpt \"release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate\" digest 52b328bce7005efb",
+   "excerpt": "release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate",
+   "digest": "52b328bce7005efb96d48718f9dcaddc5ec436369875deb4fcbf1de4b201de97"
+  },
+  {
+   "t": "2026-10-13T13:47:03.233Z",
+   "scenario": "changed",
+   "msg": "submit 0x7ed5e63130 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0x7ed5e63130f97e0d93122cccfe92ab4d191c9d376b371f20dc3dd6efaf17af9d",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:47:14.198Z",
+   "scenario": "release",
+   "msg": "release 0x3fd144cf94 exec=FINISHED_WITH_ERROR result=AGREE",
+   "fn": "release",
+   "hash": "0x3fd144cf9449bb2f497004ec1f092b5794088f8bb8cbddfab35c9f14d9935ea4",
+   "exec": "FINISHED_WITH_ERROR"
+  },
+  {
+   "t": "2026-10-13T13:47:15.673Z",
+   "scenario": "release",
+   "msg": "early release attempt: exec=FINISHED_WITH_ERROR, status still verified"
+  },
+  {
+   "t": "2026-10-13T13:47:26.727Z",
+   "scenario": "stale",
+   "msg": "challenge 0xae4227b0f3 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "challenge",
+   "hash": "0xae4227b0f317a6c03e69ba7fac16a31668b48d63b5882729f3a33567fbecbf2a",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:47:44.139Z",
+   "scenario": "misleading",
+   "msg": "submit 0x7b9033560b exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0x7b9033560b5a104886f0f27bee3e6ff826f43c8a3ab854a7e75f005b04f8b8a3",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:47:50.327Z",
+   "scenario": "uphold",
+   "msg": "resolve_dispute 0xdd847ba549 exec=NOT_VOTED result=IDLE",
+   "fn": "resolve_dispute",
+   "hash": "0xdd847ba549f6f4a443a377858736d93f18ae080238e2813e9654686520a2a3c3",
+   "exec": "NOT_VOTED"
+  },
+  {
+   "t": "2026-10-13T13:48:09.521Z",
+   "scenario": "changed",
+   "msg": "verify 0x917169c54a exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "verify",
+   "hash": "0x917169c54a7e487de6d2e792c5d80210f013845096020d450ada072455c0bdd8",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:48:10.815Z",
+   "scenario": "changed",
+   "msg": "verified, committed excerpt \"release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate\" digest 52b328bce7005efb",
+   "excerpt": "release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate",
+   "digest": "52b328bce7005efb96d48718f9dcaddc5ec436369875deb4fcbf1de4b201de97"
+  },
+  {
+   "t": "2026-10-13T13:48:14.687Z",
+   "scenario": "changed",
+   "msg": "page edited and pushed (exit 0); waiting for the raw cache to expire"
+  },
+  {
+   "t": "2026-10-13T13:48:14.696Z",
+   "scenario": "uphold",
+   "msg": "attempt 1 left the dispute open (NOT_VOTED/IDLE)"
+  },
+  {
+   "t": "2026-10-13T13:48:15.495Z",
+   "scenario": "stale",
+   "msg": "reclaim_stale send failed (Transaction reverted: EVM tx 0x277eca594988fd4bd68c26a44f77a9243c24e4d), retry 1"
+  },
+  {
+   "t": "2026-10-13T13:49:18.148Z",
+   "scenario": "stale",
+   "msg": "reclaim_stale 0xdd2148e329 exec=FINISHED_WITH_ERROR result=AGREE",
+   "fn": "reclaim_stale",
+   "hash": "0xdd2148e32954c3ffa6a6d173f17133ab1497603d1cbc73cc912914fb89e56ca4",
+   "exec": "FINISHED_WITH_ERROR"
+  },
+  {
+   "t": "2026-10-13T13:49:19.964Z",
+   "scenario": "stale",
+   "msg": "early reclaim_stale: exec=FINISHED_WITH_ERROR, status still disputed"
+  },
+  {
+   "t": "2026-10-13T13:49:19.965Z",
+   "scenario": "stale",
+   "msg": "stale at 2026-10-13T15:46:53.000Z, waiting 122 min"
+  },
+  {
+   "t": "2026-10-13T13:50:02.004Z",
+   "scenario": "misleading",
+   "msg": "verify 0xb4158381dd exec=FINISHED_WITH_ERROR result=AGREE",
+   "fn": "verify",
+   "hash": "0xb4158381dd81b6c7bad7d190abfdcbb7e3291dd4f9d14c8839fc72d0ec02376c",
+   "exec": "FINISHED_WITH_ERROR"
+  },
+  {
+   "t": "2026-10-13T13:50:24.045Z",
+   "scenario": "misleading",
+   "msg": "planned / quoted wording: verify exec=FINISHED_WITH_ERROR, status after = submitted, evidence recorded = \"\""
+  },
+  {
+   "t": "2026-10-13T13:50:38.823Z",
+   "scenario": "uphold",
+   "msg": "resolve_dispute 0xf33825e57f exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "resolve_dispute",
+   "hash": "0xf33825e57f41d3eecccf3feb5540385de77d359a6f4df618fbf2408f118d3fd1",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:50:52.143Z",
+   "scenario": "misleading",
+   "msg": "create_engagement 0x15e55106c8 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0x15e55106c80d161f17e6133b6144a64e84f377d40fcd5476389f27da24e6be33",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:51:00.254Z",
+   "scenario": "uphold",
+   "msg": "dispute resolved on attempt 2: status=released note=\"The committed evidence shows both deliverables were met at verification time, and the current page confirms the marker line is still present with no evidence of tampering or falsification.\"",
+   "attempts": 2,
+   "status": "released",
+   "note": "The committed evidence shows both deliverables were met at verification time, and the current page confirms the marker line is still present with no evidence of tampering or falsification."
+  },
+  {
+   "t": "2026-10-13T13:51:12.273Z",
+   "scenario": "misleading",
+   "msg": "accept 0xd68f157a36 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0xd68f157a36c445a176be20df3b790d89e80c4b60c16388f7494edb6c7de14176",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:51:27.985Z",
+   "scenario": "misleading",
+   "msg": "submit 0x1b16b7eb50 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0x1b16b7eb501eec25eade5198e187e4afe75f5b69acde7b6c45c0403cdd51560d",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:51:47.924Z",
+   "scenario": "misleading",
+   "msg": "verify 0xbbf698e7e2 exec=FINISHED_WITH_ERROR result=AGREE",
+   "fn": "verify",
+   "hash": "0xbbf698e7e2d2c6e803917f8208c7b3ff0c3e9fed11941e970234957ec1ccf055",
+   "exec": "FINISHED_WITH_ERROR"
+  },
+  {
+   "t": "2026-10-13T13:52:09.594Z",
+   "scenario": "misleading",
+   "msg": "reject line present: verify exec=FINISHED_WITH_ERROR, status after = submitted, evidence recorded = \"\""
+  },
+  {
+   "t": "2026-10-13T13:53:58.464Z",
+   "scenario": "changed",
+   "msg": "challenge 0x58b5f2771c exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "challenge",
+   "hash": "0x58b5f2771c8be6e8eebb3e51eb0cb374fb28d267513a39d009c9a644a0061f50",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:56:57.221Z",
+   "scenario": "changed",
+   "msg": "resolve_dispute 0x55fa798784 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "resolve_dispute",
+   "hash": "0x55fa7987843922bedae34240f94191525f39f47a76813f34e10cae34d315cc7f",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T13:57:19.283Z",
+   "scenario": "changed",
+   "msg": "dispute resolved on attempt 1: status=refunded note=\"The committed evidence indicates the Q3 pricing release was shipped to production, but the current page shows it was pulled from production, contradicting the agreed terms.\"",
+   "attempts": 1,
+   "status": "refunded",
+   "note": "The committed evidence indicates the Q3 pricing release was shipped to production, but the current page shows it was pulled from production, contradicting the agreed terms."
+  },
+  {
+   "t": "2026-10-13T13:57:19.283Z",
+   "scenario": "changed",
+   "msg": "after the edit the dispute ended refunded (note: The committed evidence indicates the Q3 pricing release was shipped to production, but the current page shows it was pulled from production, contradicting the agreed terms.)"
+  },
+  {
+   "t": "2026-10-13T14:12:31.206Z",
+   "scenario": "uphold",
+   "msg": "verify tx FINALIZED 30.0 min after it was accepted",
+   "label": "verify tx",
+   "finalizedAfterMinutes": 30
+  },
+  {
+   "t": "2026-10-13T14:13:03.496Z",
+   "scenario": "overturn",
+   "msg": "resolve_dispute tx FINALIZED 29.7 min after it was accepted",
+   "label": "resolve_dispute tx",
+   "finalizedAfterMinutes": 29.7
+  },
+  {
+   "t": "2026-10-13T14:13:03.907Z",
+   "scenario": "overturn",
+   "msg": "client balance 4.996541 (after posting the bond) -> 4.997186 (escrow + bond back = 0.002200)",
+   "afterBond": "4996541137371456850",
+   "after": "4997185593458141750",
+   "before": "4997044380144813000"
+  },
+  {
+   "t": "2026-10-13T14:20:35.238Z",
+   "scenario": "uphold",
+   "msg": "resolve_dispute tx FINALIZED 29.6 min after it was accepted",
+   "label": "resolve_dispute tx",
+   "finalizedAfterMinutes": 29.6
+  },
+  {
+   "t": "2026-10-13T14:20:35.853Z",
+   "scenario": "uphold",
+   "msg": "provider balance 4.997223 -> 4.998785 (escrow + bond = 0.002200)",
+   "before": "4997223029205479500",
+   "after": "4998785084427953000"
+  },
+  {
+   "t": "2026-10-13T14:45:13.839Z",
+   "scenario": "release",
+   "msg": "release 0x22bdc6ea5f exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "release",
+   "hash": "0x22bdc6ea5fc62a61d1a3ae831b06fcda7223290f417320c8eb4589780212e5d1",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T15:15:23.528Z",
+   "scenario": "release",
+   "msg": "release tx FINALIZED 30.1 min after it was accepted",
+   "label": "release tx",
+   "finalizedAfterMinutes": 30.1
+  },
+  {
+   "t": "2026-10-13T15:15:38.588Z",
+   "scenario": "release",
+   "msg": "release 0xda06c3c598 exec=FINISHED_WITH_ERROR result=AGREE",
+   "fn": "release",
+   "hash": "0xda06c3c598df3475fdc049b8cf11d4cfd17ee46dbcf7f896780374c231cb3f26",
+   "exec": "FINISHED_WITH_ERROR"
+  },
+  {
+   "t": "2026-10-13T15:15:38.589Z",
+   "scenario": "release",
+   "msg": "second release: exec=FINISHED_WITH_ERROR; provider 4.998785 -> 5.000785 (escrow = 0.002000)",
+   "before": "4998785084427953000",
+   "after": "5000785084427953000"
+  },
+  {
+   "t": "2026-10-13T15:50:55.051Z",
+   "scenario": "stale",
+   "msg": "reclaim_stale 0x0d99331b26 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "reclaim_stale",
+   "hash": "0x0d99331b26e682acfe182bc2b9c82ae0805c00327adee87b4e0c28b689223ad2",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-13T16:20:50.850Z",
+   "scenario": "stale",
+   "msg": "reclaim_stale tx FINALIZED 29.9 min after it was accepted",
+   "label": "reclaim_stale tx",
+   "finalizedAfterMinutes": 29.9
+  },
+  {
+   "t": "2026-10-13T16:20:51.644Z",
+   "scenario": "stale",
+   "msg": "split: provider +-0.001404 (half the escrow = 0.001000), client +-0.021980 (half + bond = 0.001200, before its own gas)",
+   "providerDelta": "-1404072637399550",
+   "clientDelta": "-21979895141811400"
+  }
+ ],
+ "results": {
+  "misleading": "all three misleading pages refused, nothing recorded",
+  "changed": {
+   "status": "refunded",
+   "note": "The committed evidence indicates the Q3 pricing release was shipped to production, but the current page shows it was pulled from production, contradicting the agreed terms.",
+   "committedExcerpt": "release notes | q3 pricing release shipped to production 2026 | migration guide published at docs/migrate"
+  },
+  "verifyFinalityMin": 30,
+  "overturn": {
+   "status": "refunded",
+   "clientDelta": "644456086684900"
+  },
+  "uphold": {
+   "status": "released",
+   "providerDelta": "1562055222473500"
+  },
+  "release": {
+   "status": "released",
+   "providerDelta": "2000000000000000"
+  },
+  "stale": {
+   "status": "split"
+  }
+ },
+ "accounting": {
+  "balance": 6000000000000000,
+  "in_flight": 0,
+  "shortfall": 0,
+  "total_received": "16800000000000000",
+  "total_scheduled": "10800000000000000",
+  "unscheduled": 6000000000000000
+ },
+ "finished": "2026-10-13T16:20:53.429Z"
+}
