@@ -181,7 +181,7 @@ function SelectField({ id, value, onChange, choices }: { id: string; value: numb
   );
 }
 
-function CreateEngagementDialog() {
+function CreateEngagementDialog({ onCreated }: { onCreated: (id: string) => void }) {
   const { address } = useWallet();
   const create = useCreateEngagement();
   const [open, setOpen] = useState(false);
@@ -210,7 +210,7 @@ function CreateEngagementDialog() {
         id: form.id, provider: form.provider, description: form.description, url: form.url, marker: form.marker,
         rejectMarker: form.reject, deadline: deadlineTs, challengeWindow: windowSeconds, staleAfter: staleSeconds, amountWei,
       },
-      { onSuccess: () => { setOpen(false); setForm(blank); } } as any
+      { onSuccess: () => { onCreated(form.id); setOpen(false); setForm(blank); } } as any
     );
   };
 
@@ -398,7 +398,8 @@ function EngagementHero({ id }: { id: string }) {
   const challengeOpen = isChallengeOpen(e, now);
   const staleAt = Number(e.stale_at);
   const all = [acceptAction, submitAction, verifyAction, resolveAction, releaseAction, reclaimAction, staleAction];
-  const active = all.find((a) => a.progress);
+  // the action that reported progress most recently, not the first hook that ever did
+  const active = all.filter((a) => a.progress).sort((x, y) => (y.progress?.at ?? 0) - (x.progress?.at ?? 0))[0];
 
   return (
     <div className="p-7 sm:p-8" style={{ background: "var(--card)", border: "1px solid var(--border-bright)" }}>
@@ -612,7 +613,7 @@ export default function HomePage() {
             Every stage below is a checkpoint validators independently confirm — not a status your counterparty can just claim.
           </div>
         </div>
-        <CreateEngagementDialog />
+        <CreateEngagementDialog onCreated={setSelectedId} />
       </div>
 
       <div className="mb-10">

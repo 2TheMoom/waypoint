@@ -89,7 +89,7 @@ function useWriteAction<TArgs>(
   const { address } = useWallet();
   const queryClient = useQueryClient();
   const [isPending, setIsPending] = useState(false);
-  const [progress, setProgress] = useState<WriteProgress | null>(null);
+  const [progress, setProgress] = useState<(WriteProgress & { at: number }) | null>(null);
 
   const refresh = (id: string) => {
     queryClient.invalidateQueries({ queryKey: ["engagement", id] });
@@ -105,7 +105,7 @@ function useWriteAction<TArgs>(
       setProgress(null);
       const id = getEngagementId(args);
       return action(contract, args, (p) => {
-        setProgress(p);
+        setProgress({ ...p, at: Date.now() });
         if (p.stage === "finalized") {
           refresh(id);
           if (messages.finalized) success(messages.finalized.title, { description: messages.finalized.description });
