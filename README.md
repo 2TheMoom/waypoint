@@ -5,271 +5,224 @@
 [![Twitter](https://img.shields.io/twitter/url/https/twitter.com/yeagerai.svg?style=social&label=Follow%20%40GenLayer)](https://x.com/GenLayer)
 
 ## About
-Waypoint is a **verified milestone escrow** - a GenLayer Intelligent
-Contract where a client funds real GEN against a deliverable, and GenVM
-validators independently confirm the work before the money moves, only
-escalating to reasoned judgment when a client genuinely disputes the
-result.
+Waypoint is a **verified milestone escrow**: a GenLayer Intelligent
+Contract where a client funds real GEN against a deliverable, GenVM
+validators independently check the evidence before the money moves, and a
+genuine dispute is weighed against the evidence that was agreed at
+verification time, not only against a page that may have changed since.
 
-`create_engagement(engagement_id, provider, deliverable_description, verification_url, verification_marker, deadline)`
-is a payable call: the client escrows the agreed amount and locks in a
-`verification_url` and `verification_marker` they expect to find there
-once the work is done. `submit(engagement_id)` lets the provider mark the
-deliverable ready. `verify(engagement_id)` - the common path - is fully
-deterministic: validators independently fetch `verification_url` and check
-whether `verification_marker` is present in the response, with **no LLM
-involved**. That's enough to prove a deliverable is genuinely live - the
-page is deployed, the PR shows "Merged", the API reports
-`status: complete` - without trusting either party's word for it.
+The lifecycle is `proposed -> funded -> submitted -> verified -> released`,
+with `disputed`, `refunded` and `split` as the other endings.
 
-A deterministic pass isn't the same as a deliverable being *right*, so the
-client has a 10-minute window after verification to `challenge` it with a
-reason. Only a genuine dispute escalates to `gl.nondet.exec_prompt` -
-validators re-fetch the live content and weigh the client's specific
-objection against it, and only the verdict (`uphold`/`overturn`) is
-consensus-critical; the reasoning text is informational. If nobody
-disputes within the window, `release()` pays the provider. If the provider
-never submits by the deadline, `reclaim_timeout()` lets the client recover
-the escrow - and `reclaim_stale()` covers the two states that can
-otherwise strand the escrow forever: submitted but never verified (client
-only, refunds the client), or disputed with adjudication stuck (anyone can
-trigger it, and it releases to the provider). `resolve_dispute()` is
-itself permissionless, not provider-only, for the same reason.
+1. `create_engagement(...)` is payable. The client escrows GEN and fixes the
+   deliverable text, a public https `verification_url`, a **whole-line
+   marker**, an optional **reject marker**, the deadline, the challenge
+   window and the recovery time.
+2. `accept(id)`: the provider agrees to those terms before work starts. Until
+   then the client can cancel and take the escrow back.
+3. `submit(id)`: the provider says the work is ready.
+4. `verify(id)`: permissionless. Validators fetch the page themselves and
+   must agree on the result **and on the lines around the marker**. The
+   excerpt and its sha256 are stored on chain.
+5. `challenge(id, reason)`: the client posts a bond (10% of the escrow) inside
+   the challenge window.
+6. `resolve_dispute(id)`: permissionless. Validators weigh the client's
+   objection against the **committed excerpt and the page as it reads now**.
+7. `release(id)`: permissionless, pays the provider once the window has
+   passed with no dispute.
 
-**Payouts and refunds go through `gl.evm.contract_interface` (`Payee`),
-not `gl.get_contract_at()`.** Clients and providers are EOAs (plain
-wallets), and `gl.get_contract_at(addr).emit_transfer(...)` is an internal
-Intelligent-Contract dispatch message - for an address holding no
-contract code, that message is resolved by a handler that doesn't
-reliably reach validator majority, so the payout can leave this contract
-and be credited to nobody, intermittently and unpredictably.
-`gl.evm.contract_interface` instead emits a genuine external chain-layer
-value transfer (`EthSend` with empty calldata) - the SDK's documented
-primitive for paying an EOA. This was flagged directly by a GenLayer
-steward reviewing this project; previously this repo (like several others
-on this account) mischaracterized the resulting intermittent failures as
-an unconfirmed platform bug in
-[genvm-manager#20](https://github.com/genlayerlabs/genvm-manager/issues/20)
-rather than what it actually was: the wrong transfer primitive for the
-recipient type.
+### What counts as evidence
+
+The first version matched the marker anywhere in the page, which a steward
+correctly pointed out can be triggered by negated, historical or unrelated
+text. Verification now works on **whole lines**:
+
+- The page is reduced to text lines (scripts, styles, comments, `noscript`,
+  `svg` and `template` content are dropped; block tags and `<br>` start a
+  new line; entities are decoded; whitespace and case are normalized).
+- The marker must equal **an entire line**. A line that merely contains it,
+  negates it ("did not ship"), quotes it, plans it ("planned: ...") or splits
+  it across two lines does not match.
+- An optional **reject marker** is a line that, if present, makes the evidence
+  contradictory and verification is refused.
+- Markers must be 12 to 200 characters with at least one letter and one digit,
+  so a creator has to pick something specific (a date, a version, an id).
+- If the page cannot be read cleanly (non-200, empty, network error) nothing
+  is recorded and `verify` can simply be called again.
+
+This is still a check that a specific line is on a specific page. It cannot
+tell whether the line is *true*; the creator chooses the URL and the line, and
+the provider accepts them before any work starts. What it does guarantee is
+that the page said exactly that, validators agreed on the surrounding
+context, and the agreement is committed to the chain.
+
+### Evidence commitments and disputes
+
+At `verify`, validators must agree on two things: that the marker is a whole
+line, and on the excerpt (the matched line plus one line each side, at most
+600 characters). The excerpt and `sha256(excerpt)` are stored
+(`evidence_excerpt`, `evidence_digest`).
+
+At `resolve_dispute` the reviewers receive the objection, the deliverable
+text, the **committed excerpt**, and the **whole current page** (never the
+first few kilobytes of it): the contract tells them whether the marker line is
+still present and whether the committed evidence is unchanged. A page that
+cannot be read in full (non-200, or over 12,000 characters after reduction)
+yields no verdict rather than a partial judgment. The model may answer
+`uphold`, `overturn` or `inconclusive`; only the first two ever move money,
+and `inconclusive`, unparseable or unreadable answers leave the dispute exactly
+as it was so it can be retried.
+
+### Challenge bond and the stale-dispute split
+
+- A challenge needs a **bond of exactly 10% of the escrow** (at least 1 wei).
+  If the objection is upheld the client gets the escrow **and** the bond back;
+  if it fails the provider receives both. Frivolous challenges cost something.
+- If a dispute is not adjudicated within `stale_after`, `reclaim_stale` is open
+  to anyone and **splits the escrow evenly** between provider and client, and
+  **returns the bond** to the client. The provider is not paid in full for work
+  that was never confirmed, and the client cannot hold the funds forever by
+  filing and walking away. (A stuck *submission* still refunds the client, and
+  only the client can trigger it.)
+- Windows are bounded on chain: challenge window 1 hour to 7 days, recovery
+  time 2 hours to 30 days. The one hour floor is deliberately above the
+  roughly 28 to 30 minute finality measured on Bradbury, so a challenge can
+  never be cut off by consensus latency.
+
+### Payouts
+
+Payments go through `gl.evm.contract_interface` (`Payee`), the documented
+chain-layer path for paying a wallet. A payment only executes when the
+transaction that emitted it **finalizes**; if that transaction is rejected or
+overturned the message is dropped with it. Every payout path moves the
+engagement to a terminal status, records each amount in `payouts` and emits
+the transfer in the **same transaction**, so a settled engagement can never
+be paid again. There is no retry method, because re-sending a payment that was
+merely slow to finalize is what once created the duplicate-delivery risk.
+
+`get_accounting()` reconciles the ledger against the contract's real balance,
+read-only: `unscheduled` (still owed), `in_flight` (scheduled, waiting for
+finality) and `shortfall`. `in_flight` returning to 0 means every scheduled
+payout has landed. A read taken seconds after a value-bearing transaction can
+briefly see the new balance before the stored totals catch up.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract:** [`0x1d30EDaf43d1f044A638a0ED2fD6AD3783b3AA37`](https://explorer-bradbury.genlayer.com/address/0x1d30EDaf43d1f044A638a0ED2fD6AD3783b3AA37)
+- **Contract (v3):** [`0x15f975aD3Ce54596A73b999b0c85Fd63e0eF8C9c`](https://explorer-bradbury.genlayer.com/address/0x15f975aD3Ce54596A73b999b0c85Fd63e0eF8C9c)
 - **Frontend:** https://waypoint-frontend-one.vercel.app
-- Verified via 52 passing direct-mode tests (`python -m pytest tests/direct/`),
-  covering the full lifecycle (funded → submitted → verified → released,
-  and the disputed/refunded/timeout branches), every access-control check
-  (only the provider can submit, only the client can challenge or
-  reclaim), a clean revert-then-retry when the verification marker isn't
-  found yet, the challenge-window boundary, both dispute verdicts (uphold
-  and overturn), `resolve_dispute`'s new permissionless access,
-  `reclaim_stale`'s recovery paths (stuck-submitted, stuck-disputed,
-  too-early, non-client caller, already-healthy engagement), a failed/
-  unreachable adjudication reverting cleanly instead of defaulting to
-  either verdict, and the dispute prompt genuinely wrapping untrusted
-  input in isolating tags (verified by requiring those tags in the mock
-  match pattern itself, not just asserting on the output).
-- **Live-verified with real GEN (previous deployment,
-  `0x83AE6C0D439110Cf0DF45eE35dA874e38F92002a`, superseded by the address
-  above after the `Payee` fix and other steward-requested changes)**: created
-  three real engagements funded with genuine escrowed value.
-  - `wp-live-1` deliberately proved the safety property rather than just
-    the happy path: `verify()` correctly reverted when the chosen marker
-    phrase turned out to wrap across a line break in the actual rendered
-    document (so the literal substring wasn't present) - the engagement
-    stayed cleanly at `submitted`, exactly the re-callable revert behavior
-    the direct-mode tests already cover, now confirmed against a real
-    fetch of a real URL.
-  - `wp-live-2` and `wp-live-3` both reached `create_engagement` →
-    `submit` → `verify` → `challenge` cleanly (5/5 validator agreement on
-    every deterministic step). `resolve_dispute`'s LLM step, however, hit
-    genuine `DETERMINISTIC_VIOLATION`s on both - five consecutive attempts
-    across two different dispute scenarios (one deliberately ambiguous,
-    one deliberately factual and clear-cut) all failed to reach validator
-    consensus on the verdict, with contract state safely unchanged after
-    every failed attempt (still `disputed`, re-resolvable). This lines up
-    with the same Bradbury render/LLM-path degradation independently
-    observed against Summit (a sibling project on this account) the same
-    night - not specific to this contract's prompt design, since it
-    reproduced on both an ambiguous and an unambiguous dispute equally.
-    The deterministic majority of Waypoint's surface (everything except
-    the dispute-escalation path) is fully proven live end-to-end.
+- Earlier deployments are superseded: `0x1d30EDaf...` (exactly-once payouts,
+  substring markers) and before it `0x83AE6C0D...`.
 
-### Payouts are delivered exactly once, by construction
-A steward rejected the previous design because a retry cap "bounds the
-resulting exposure but does not prevent duplicate delivery". That was
-correct, and it applied to every retry variant this repo tried (blind,
-balance-checked, capped). The fix is to remove retry entirely, because
-it was never needed:
+<!--LIVE_START-->
+## Live evidence (Bradbury, contract v3)
 
-- **A payment to a wallet only executes when the transaction that emitted
-  it finalizes** (GenLayer docs: external messages "always execute on
-  finalization" and cannot be emitted on acceptance). If that transaction
-  is rejected or overturned, the message is dropped with it.
-- Every payout path (`release`, `reclaim_timeout`, `resolve_dispute`,
-  `reclaim_stale`) requires a non-terminal status and moves the
-  engagement to `released` or `refunded` **in the same transaction** that
-  records the amount in `payouts` and emits the transfer. Either all of
-  it happens or none of it does, and a settled engagement can't reach any
-  payout path again. No `retry_payout` exists.
-- The failures previously blamed on the platform fit this model exactly:
-  a payout that "never arrived" was waiting for its transaction to
-  finalize (one landed hours later, on its own), and the other failure
-  mode rejected the whole transaction, so nothing was recorded or sent.
-  Re-sending a payout that was merely slow is what created the
-  duplicate-delivery risk.
+`scripts/e2e.mjs` ran every scenario below against the deployed v3 contract with a **separate client wallet and provider wallet** (and a third wallet for permissionless calls). The full machine-readable log is `scripts/e2e-log.json`; the evidence pages are in `demo/evidence/`. Run `mv6q5wdt`.
 
-`get_accounting()` reconciles the ledger against the contract's real
-balance, read-only: `unscheduled` (escrowed, not yet paid out, still owed
-to someone), `in_flight` (scheduled, waiting for finality), and
-`shortfall`. `in_flight` returning to 0 means every scheduled payout has
-landed. Nothing in it can trigger a transfer, so a misleading balance
-can't cause a payment. One honest caveat: a read taken seconds after a
-value-bearing transaction can briefly see the new balance before the
-stored totals catch up, overstating `in_flight` for a moment (seen once in
-the live run below, consistent on the next read).
+| Scenario | What was tested | Transactions | Result |
+|---|---|---|---|
+| Misleading evidence | `verify` against a page where the marker line is **negated**, **planned/quoted**, or **contradicted by the reject line** | [`0xf3b883a7ab`](https://explorer-bradbury.genlayer.com/tx/0xf3b883a7ab896d05998f3cf541df532eede9de4eda803b5a0382e262a1ea5c7e) [`0xb4158381dd`](https://explorer-bradbury.genlayer.com/tx/0xb4158381dd81b6c7bad7d190abfdcbb7e3291dd4f9d14c8839fc72d0ec02376c) [`0xbbf698e7e2`](https://explorer-bradbury.genlayer.com/tx/0xbbf698e7e2d2c6e803917f8208c7b3ff0c3e9fed11941e970234957ec1ccf055) | All three `FINISHED_WITH_ERROR`; the engagement stays `submitted` and `evidence_digest` stays empty |
+| Uphold | page is good, client objects without cause | verify [`0x997e79d57d`](https://explorer-bradbury.genlayer.com/tx/0x997e79d57d455c5f7793af2c57a42c5227dd5a2d1e363f760a7c921fad593da6), challenge [`0xeac0496fb3`](https://explorer-bradbury.genlayer.com/tx/0xeac0496fb364859e30a8bbc70e25df20034d6f7eaffc48c18a1b8e49ffdf5662), resolve [`0xf33825e57f`](https://explorer-bradbury.genlayer.com/tx/0xf33825e57f41d3eecccf3feb5540385de77d359a6f4df618fbf2408f118d3fd1) | `released`: provider paid escrow + bond. First resolve attempt `NOT_VOTED`/`IDLE` (no validator had voted yet) changed nothing and was retried |
+| Overturn | page itself says the migration guide is missing, client objects | verify [`0x44edd358fa`](https://explorer-bradbury.genlayer.com/tx/0x44edd358fa728d4fda0efb80ed3ecab979e5f99ae3051e788b0f188df27eeeab), challenge [`0x050282743e`](https://explorer-bradbury.genlayer.com/tx/0x050282743e92dd779f936a45ace826a47d7c09851822b2df8c44f1c49f7294ff), resolve [`0xc1992980ba`](https://explorer-bradbury.genlayer.com/tx/0xc1992980ba702f72355bbb692d406c6a10398ac21a186f58cbb89a595bde2572) | `refunded`: client refunded escrow + bond; the written reason cites the committed evidence |
+| Page changed after verification | page is edited to say the release was pulled, then the client objects | verify [`0x917169c54a`](https://explorer-bradbury.genlayer.com/tx/0x917169c54a7e487de6d2e792c5d80210f013845096020d450ada072455c0bdd8), challenge [`0x58b5f2771c`](https://explorer-bradbury.genlayer.com/tx/0x58b5f2771c8be6e8eebb3e51eb0cb374fb28d267513a39d009c9a644a0061f50), resolve [`0x55fa798784`](https://explorer-bradbury.genlayer.com/tx/0x55fa7987843922bedae34240f94191525f39f47a76813f34e10cae34d315cc7f) | `refunded`: the reasoning weighs the committed excerpt against the edited page |
+| Release | nobody objects | early release [`0x3fd144cf94`](https://explorer-bradbury.genlayer.com/tx/0x3fd144cf9449bb2f497004ec1f092b5794088f8bb8cbddfab35c9f14d9935ea4), release [`0x22bdc6ea5f`](https://explorer-bradbury.genlayer.com/tx/0x22bdc6ea5fc62a61d1a3ae831b06fcda7223290f417320c8eb4589780212e5d1), repeat [`0xda06c3c598`](https://explorer-bradbury.genlayer.com/tx/0xda06c3c598df3475fdc049b8cf11d4cfd17ee46dbcf7f896780374c231cb3f26) | Early release refused inside the window; after it the provider's balance rose by exactly 0.002000 GEN; the repeat is refused |
+| Stale dispute | challenged, never adjudicated, `stale_after` = 2 hours | early attempt [`0xdd2148e329`](https://explorer-bradbury.genlayer.com/tx/0xdd2148e32954c3ffa6a6d173f17133ab1497603d1cbc73cc912914fb89e56ca4), split pending | pending until the 2 hour recovery time passes |
 
-Tests count every transfer the contract actually emits (`EthSend`), not
-just state: `release` and `reclaim_timeout` each emit exactly one transfer
-and can't repeat, and once a dispute settles, every payout path
-(`resolve_dispute`, `release`, `reclaim_timeout`, `reclaim_stale`) is
-refused with nothing emitted. Mutation-checked: removing any of the status
-guards, the terminal status change, the payout record, either running
-total, or making `_payout` pay twice each fails a test.
+### Finality and the challenge window
 
-### Live-verified exactly-once payout (current deployment)
-Engagement `wp-once-1791545405997`, a dedicated test wallet, real GEN:
+Transactions were `ACCEPTED` within seconds to a couple of minutes and `FINALIZED` about **29.6 to 30.1 minutes** after acceptance (4 measurements in this run). Payments are delivered on finalization, which is why the challenge window can never be shorter than one hour (twice the measured finality) and why the frontend does not treat `ACCEPTED` as done.
 
-| Step | Transaction | Result |
-|---|---|---|
-| `create_engagement`, 0.01 GEN escrowed | `0x9557f670...` | accounting: escrowed 0.01, unscheduled 0.01 |
-| `reclaim_timeout` after the deadline | `0xb4e61a1b...` | **exactly one** message: 0.01 GEN to the client, `onAcceptance: false`; accounting: scheduled 0.01, in flight 0.01 |
-| `reclaim_timeout` again | `0xe73c54a5...` | `FINISHED_WITH_ERROR` ("not awaiting submission (status: refunded)"), **no messages** |
-| reclaim transaction finalizes (~28 min after acceptance) | `0xb4e61a1b...` | `FINALIZED`; on that same poll the contract balance went 0.01 to 0, the client's balance rose by exactly 0.01 GEN, `in_flight` returned to 0. Delivered once. |
+### Payments, checked against the contract's own accounting
 
-Script: `verify-payee-live.mjs`, then `watch-finality.mjs` for the
-landing. Earlier steward rounds and the abandoned retry designs are in
-the git history.
+Wallet balance deltas include the gas the same wallet paid on other transactions in that window, so the authoritative check is `get_accounting()`: every scheduled payout is `in_flight` until its transaction finalizes and then leaves the contract balance. After the dispute payouts finalized the contract balance had dropped by exactly the scheduled amounts, and the release scenario's provider balance rose by exactly the escrow.
 
-## What's included
-- `contracts/waypoint.py` — the Waypoint Intelligent Contract
-- `tests/direct/test_waypoint.py` — direct-mode tests (in-memory, mocked web/LLM)
-- **Contract linting** — static analysis to catch common contract issues before deployment
-- **CI pipeline** — GitHub Actions workflow for linting and direct tests
-- `verify-payee-live.mjs` — a real end-to-end script proving the `Payee`
-  payout mechanism delivers value, for whoever holds the deployer key
-- A Next.js 16 frontend (TypeScript, TanStack Query, Radix UI) — a
-  survey-benchmark themed dashboard: a cairn-marked trail visualizing each
-  engagement's real on-chain lifecycle, a live challenge-window countdown,
-  and a "Field Registration" wallet-connect sequence
-- Configuration file template and deployment scripts
+<!--LIVE_END-->
+
+## Tests
+
+| Test Type | Command | What it covers |
+|-----------|---------|----------------|
+| **Lint** | `genvm-lint check contracts/waypoint.py` | static checks |
+| **Direct** | `python -m pytest tests/direct/ -v` | 59 in-memory tests with web and LLM mocks |
+| **Frontend logic** | `cd frontend && npm test` | action rules, limits mirrored from the contract, decoding |
+| **Live** | `node scripts/e2e.mjs` | the Bradbury run described above, separate client and provider wallets |
+
+The direct tests cover whole-line matching (negated, historical, quoted,
+planned, split, substring and "and more words" lines all refused), hidden and
+hostile markup (comments, unterminated comments and tags, script, style,
+noscript, svg, template), the reject marker, unreadable pages recording
+nothing, the exact bond amount and its minimum, the inclusive challenge window
+boundary, every verdict path (uphold, overturn, inconclusive, malformed,
+oversized page), the dispute prompt carrying the committed excerpt and the
+"page changed" fact, prompt-block forgery, the stale split including odd
+amounts, every payout path emitting exactly the funds held and never twice,
+and the accounting.
+
+Every rule was mutation-checked: 78 deliberate breakages, 70 caught. The 8
+survivors are not reachable from direct mode: validators in direct mode
+always recompute exactly what the leader computed, so disagreement paths
+cannot be exercised there, and a few guards (the settlement sum check, the
+duplicate-payout guard, the port and credential checks, the verdict parser)
+sit behind a second check that already stops the same input.
 
 ## Requirements
 - Python >= 3.12
 - [GenLayer CLI](https://github.com/genlayerlabs/genlayer-cli) globally installed: `npm install -g genlayer`
-- GenLayer Studio (for integration tests and deployment): Install from [Docs](https://docs.genlayer.com/developers/intelligent-contracts/tooling-setup#using-the-genlayer-studio) or use the hosted [GenLayer Studio](https://studio.genlayer.com/)
 
 ## Project Structure
 
 ```
-contracts/              # Python intelligent contracts
-  waypoint.py              # Waypoint
-tests/
-  direct/                 # Fast in-memory tests (no Studio required)
-    test_waypoint.py
-frontend/                # Next.js 16 app (TypeScript, TanStack Query, Radix UI)
-deploy/                  # TypeScript deployment scripts
-gltest.config.yaml       # Test runner network configuration
-pyproject.toml           # Python/pytest configuration
-.github/workflows/       # CI pipeline
+contracts/waypoint.py     # the Intelligent Contract
+tests/direct/             # fast in-memory tests (no Studio required)
+scripts/e2e.mjs           # live Bradbury run + its log (e2e-log.json)
+demo/evidence/            # the public pages the live run verifies against
+frontend/                 # Next.js 16 app (TypeScript, TanStack Query, Radix UI)
 ```
 
 ## Quick Start
 
-### 1. Set up Python environment
-
 ```shell
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 2. Lint the contract
-
-```shell
 genvm-lint check contracts/waypoint.py
+python -m pytest tests/direct/ -v      # use python -m, not bare pytest
+genlayer deploy --contract contracts/waypoint.py
 ```
 
-### 3. Run direct mode tests
+Then `cp frontend/.env.example frontend/.env`, set `NEXT_PUBLIC_CONTRACT_ADDRESS`,
+and run `npm install && npm run dev` in `frontend/`.
 
-```shell
-python -m pytest tests/direct/ -v
-```
+## Frontend
 
-Use `python -m pytest`, not bare `pytest` - depending on your installed
-pytest version, running the bare command can fail to put the project
-root on `sys.path`, breaking test discovery with
-`ModuleNotFoundError: No module named 'tests'`.
+- **Reads** use an account-free client. **Writes** use a second client built
+  with the injected wallet provider and connected to Bradbury before signing,
+  as the GenLayerJS docs prescribe for browser wallets.
+- An `ACCEPTED` transaction is **not** treated as done. A write is complete
+  only when the transaction was accepted, its execution returned (not a
+  revert), and the engagement read back in the expected status. Fund-moving
+  writes (`release`, `resolve_dispute`, `reclaim_*`) then keep watching until
+  the transaction is `FINALIZED`, because the transfer lands then, and say so
+  in the UI.
+- The create form validates the URL and markers with the same rules as the
+  contract (and a unit test fails if the limits drift apart), shows the exact
+  bond a challenge will post, and offers only challenge windows above Bradbury
+  finality.
+- The list loads the newest 20 engagements through the paged
+  `get_engagement_ids(offset, limit)`, never the whole history.
 
-### 4. Deploy the contract
+## Methods
 
-1. Choose your network: `genlayer network`
-2. Deploy: `genlayer deploy` (runs the script in `/deploy/deployScript.ts`)
-
-### 5. Set up the frontend
-
-1. Copy `frontend/.env.example` to `frontend/.env`
-2. Add your deployed contract address as `NEXT_PUBLIC_CONTRACT_ADDRESS`
-3. Run:
-
-```shell
-cd frontend
-npm install
-npm run dev
-```
-
-The app will be available at http://localhost:3000/.
-
-## How Waypoint Works
-
-1. **`create_engagement(...)`** — payable. The client escrows GEN and
-   locks in the deliverable, verification URL, and marker.
-2. **`submit(engagement_id)`** — provider-only, marks the deliverable
-   ready for verification.
-3. **`verify(engagement_id)`** — permissionless, deterministic. Reverts
-   cleanly (re-callable) if the marker isn't found yet.
-4. **`challenge(engagement_id, reason)`** — client-only, within a
-   10-minute window after verification.
-5. **`resolve_dispute(engagement_id)`** — permissionless (not
-   provider-only): an uncooperative provider can't strand a disputed
-   engagement forever. Validators weigh the dispute reason against the
-   live content via `gl.nondet.exec_prompt` and release or refund
-   accordingly.
-6. **`release(engagement_id)`** — permissionless, once the challenge
-   window has passed with no dispute.
-7. **`reclaim_timeout(engagement_id)`** — client-only, if the provider
-   never submitted by the deadline.
-8. **`reclaim_stale(engagement_id)`**: recovery for an engagement stuck
-   for 24 hours, with different access depending on the case:
-   - **Stuck submission** (24 hours past the deadline and still
-     `submitted`, so the marker never appeared): **client-only**, and it
-     refunds the client.
-   - **Stuck dispute** (24 hours past `disputed_at` and still `disputed`,
-     so adjudication never reached a clear verdict): **permissionless**.
-     It falls back to the already-verified result and releases to the
-     provider, so the provider doesn't depend on the disputing client to
-     trigger it.
-9. **`get_engagement`** / **`get_all_engagement_ids`** — read back an
-   engagement's full state, or enumerate every engagement on the contract.
-
-## Testing Strategy
-
-| Test Type | Command | Speed | Requires Studio |
-|-----------|---------|-------|-----------------|
-| **Lint** | `genvm-lint check contracts/waypoint.py` | ~250ms | No |
-| **Direct** | `python -m pytest tests/direct/ -v` | ~ms/test | No |
-| **Frontend logic** | `cd frontend && npm test` | ~ms/test | No |
+| Method | Access | Notes |
+|---|---|---|
+| `create_engagement` | anyone (payable) | escrows the amount, status `proposed` |
+| `accept` | provider | before the deadline |
+| `submit` | provider | after accepting, before the deadline |
+| `verify` | anyone | whole-line evidence, commits excerpt and digest |
+| `challenge` | client (payable) | exact bond, inside the window |
+| `resolve_dispute` | anyone | uphold or overturn; anything unclear changes nothing |
+| `release` | anyone | after the window, pays the provider |
+| `reclaim_timeout` | client | unaccepted proposal any time, accepted one after the deadline |
+| `reclaim_stale` | client (stuck submission) / anyone (stuck dispute) | refund / even split plus bond back |
+| `get_engagement`, `get_engagement_count`, `get_engagement_ids`, `get_accounting` | view | ids are paged, at most 50 |
 
 ## Community
 - **[Discord](https://discord.gg/8Jm4v89VAu)**: Discussions, support, and announcements

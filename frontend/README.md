@@ -59,20 +59,30 @@ rather than a generic modal dialog.
 ## Features
 
 - **Fund an engagement**: `create_engagement(...)` escrows real GEN
-  against a deliverable, a verification URL, and a marker string
-- **Submit**: the provider marks a deliverable ready for verification
-- **Verify**: permissionless, deterministic - validators independently
-  confirm the marker is present at the verification URL, no LLM
-- **Challenge / Resolve Dispute**: the client can dispute a verified
-  result within a 10-minute window; validators weigh the dispute against
-  the live content via reasoned judgment only when genuinely escalated
-- **Release / Reclaim**: pay the provider once the challenge window
-  passes, or let the client reclaim the escrow if the provider never
-  submitted by the deadline
-- **Recover stuck engagements**: after 24 hours, a stuck submission can be
-  refunded to the client (client only), and a stuck dispute can be released
-  to the provider by any connected account. Resolve Dispute is likewise
-  available to any connected account, matching the contract.
+  against a deliverable, a public https verification URL, a **whole-line**
+  marker, an optional reject marker, a challenge window and a recovery time.
+  The form checks the URL and markers with the contract's own rules and shows
+  the exact bond a challenge will post.
+- **Accept / Submit**: the provider accepts the terms before work starts, then
+  marks the deliverable ready. Until it accepts, the client can cancel.
+- **Verify**: permissionless. Validators fetch the page and must agree the
+  marker is a whole line and on the lines around it. That excerpt and its
+  sha256 are shown on the engagement as the committed evidence.
+- **Challenge / Resolve Dispute**: the client disputes inside the challenge
+  window (1 hour to 7 days) by posting a bond of exactly 10% of the escrow.
+  Anyone can resolve the dispute; reviewers weigh the objection against the
+  committed excerpt and the page as it reads now, and an unclear answer
+  changes nothing.
+- **Release / Reclaim**: pay the provider once the window closes, or let the
+  client reclaim an unaccepted proposal, or an accepted one that missed its
+  deadline.
+- **Recover stuck engagements**: after the engagement's recovery time, a stuck
+  submission is refunded to the client (client only) and a stuck dispute is
+  split evenly with the bond returned (any connected account).
+- **Honest transaction status**: a write shows signed, sent, accepted, then
+  *state confirmed* once the engagement reads back changed. Fund-moving writes
+  keep watching until the transaction is FINALIZED (about 30 minutes on
+  Bradbury), because that is when the transfer lands.
 - **Trail visualization**: every engagement's real on-chain lifecycle
   rendered as a cairn-marked trail, plus a log of every engagement on the
   contract

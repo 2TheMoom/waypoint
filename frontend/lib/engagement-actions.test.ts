@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { decodeEngagement } from "./contracts/decode.ts";
 import type { Engagement } from "./contracts/types.ts";
 import { availableActions, challengeOpen, expectedStatus, movesFunds, staleKind, staleOutcome } from "./engagement-actions.ts";
-import { BOND_BPS, MAX_MARKER, MAX_STALE, MAX_WINDOW, MIN_MARKER, MIN_STALE, MIN_WINDOW, markerProblem, normalizeLine, requiredBond, urlProblem } from "./limits.ts";
+import { formatGen, BOND_BPS, MAX_MARKER, MAX_STALE, MAX_WINDOW, MIN_MARKER, MIN_STALE, MIN_WINDOW, markerProblem, normalizeLine, requiredBond, urlProblem } from "./limits.ts";
 
 const CLIENT = "0x1111111111111111111111111111111111111111";
 const PROVIDER = "0x2222222222222222222222222222222222222222";
@@ -189,5 +189,20 @@ describe("write confirmation", () => {
   it("only fund-moving actions wait for finality", () => {
     assert.ok(movesFunds("release") && movesFunds("resolve_dispute") && movesFunds("reclaim_stale") && movesFunds("reclaim_timeout"));
     assert.ok(!movesFunds("verify") && !movesFunds("accept") && !movesFunds("create"));
+  });
+});
+
+describe("formatGen", () => {
+  it("keeps precision for small amounts instead of rounding to zero", () => {
+    assert.equal(formatGen("200000000000000"), "0.0002");
+    assert.equal(formatGen("2000000000000000"), "0.002");
+    assert.equal(formatGen("1100000000000000"), "0.0011");
+    assert.equal(formatGen("1000000000"), "0.000000001");
+  });
+  it("shows at least three decimals and rounds large amounts", () => {
+    assert.equal(formatGen("0"), "0.000");
+    assert.equal(formatGen("500000000000000000"), "0.500");
+    assert.equal(formatGen("2500000000000000000"), "2.500");
+    assert.equal(formatGen("not a number"), "0.000");
   });
 });

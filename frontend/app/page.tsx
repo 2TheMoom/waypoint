@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import type { Engagement } from "@/lib/contracts/types";
 import { getTxExplorerUrl } from "@/lib/genlayer/chains";
 import { availableActions, challengeOpen as isChallengeOpen, staleKind, staleOutcome } from "@/lib/engagement-actions";
-import { MIN_WINDOW, MIN_STALE, markerProblem, requiredBond, urlProblem } from "@/lib/limits";
+import { formatGen, MIN_WINDOW, MIN_STALE, markerProblem, requiredBond, urlProblem } from "@/lib/limits";
 import type { WriteProgress } from "@/lib/hooks/useWaypoint";
 
 const WINDOW_CHOICES = [
@@ -60,12 +60,6 @@ function shortAddr(hex: string): string {
   if (!hex) return "—";
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
   return `0x${clean.slice(0, 4)}…${clean.slice(-4)}`;
-}
-
-function formatGen(wei: string): string {
-  const n = Number(wei) / 1e18;
-  if (!Number.isFinite(n)) return "0.000";
-  return n.toFixed(3);
 }
 
 function genToWei(input: string): bigint {

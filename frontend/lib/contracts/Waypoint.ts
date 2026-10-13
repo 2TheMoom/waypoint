@@ -108,13 +108,12 @@ class Waypoint {
     return Array.isArray(result) ? result.map(String) : [];
   }
 
-  /** The newest ids first, up to `limit`, paging from the end so a long history never has to be loaded. */
+  /** The newest `limit` ids, oldest first within that page, read from the end so a long history never has to be loaded. */
   async getRecentEngagementIds(limit = 20): Promise<string[]> {
     const count = await this.getEngagementCount();
     if (count === 0) return [];
     const start = Math.max(0, count - limit);
-    const ids = await this.getEngagementIds(start, count - start);
-    return ids.reverse();
+    return this.getEngagementIds(start, count - start);
   }
 
   private async estimateFees(functionName: string, args: unknown[], level: FeePresetLevel = "standard") {
