@@ -14,23 +14,32 @@ function toPlainObject(raw: any): Record<string, any> {
   return obj;
 }
 
+const s = (v: unknown, fallback = "0") => String(v ?? fallback);
+
 export function decodeEngagement(raw: any): Engagement {
   const obj = toPlainObject(raw);
   return {
-    client: String(obj.client ?? ""),
-    provider: String(obj.provider ?? ""),
-    deliverable_description: String(obj.deliverable_description ?? ""),
-    verification_url: String(obj.verification_url ?? ""),
-    verification_marker: String(obj.verification_marker ?? ""),
-    amount: String(obj.amount ?? "0"),
-    deadline: String(obj.deadline ?? "0"),
-    status: String(obj.status ?? "funded") as Engagement["status"],
-    created_at: String(obj.created_at ?? "0"),
-    submitted_at: String(obj.submitted_at ?? "0"),
-    verified_at: String(obj.verified_at ?? "0"),
-    disputed_at: String(obj.disputed_at ?? "0"),
-    dispute_reason: String(obj.dispute_reason ?? ""),
-    resolution_note: String(obj.resolution_note ?? ""),
-    challenge_deadline: String(obj.challenge_deadline ?? "0"),
+    client: s(obj.client, ""),
+    provider: s(obj.provider, ""),
+    deliverable_description: s(obj.deliverable_description, ""),
+    verification_url: s(obj.verification_url, ""),
+    verification_marker: s(obj.verification_marker, ""),
+    reject_marker: s(obj.reject_marker, ""),
+    amount: s(obj.amount),
+    bond: s(obj.bond),
+    required_bond: s(obj.required_bond),
+    deadline: s(obj.deadline),
+    challenge_window: s(obj.challenge_window),
+    stale_after: s(obj.stale_after),
+    status: s(obj.status, "proposed") as Engagement["status"],
+    submitted_at: s(obj.submitted_at),
+    verified_at: s(obj.verified_at),
+    disputed_at: s(obj.disputed_at),
+    evidence_excerpt: s(obj.evidence_excerpt, ""),
+    evidence_digest: s(obj.evidence_digest, ""),
+    dispute_reason: s(obj.dispute_reason, ""),
+    resolution_note: s(obj.resolution_note, ""),
+    challenge_deadline: s(obj.challenge_deadline),
+    stale_at: s(obj.stale_at),
   };
 }

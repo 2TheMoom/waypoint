@@ -2,11 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import Waypoint from "../contracts/Waypoint";
+import Waypoint, { type CreateArgs, type WriteProgress } from "../contracts/Waypoint";
 import { getContractAddress, getStudioUrl } from "../genlayer/client";
 import { useWallet } from "../genlayer/wallet";
 import { success, error, configError } from "../utils/toast";
 import type { Engagement } from "../contracts/types";
+
+export type { WriteProgress };
 
 export function useWaypointContract(): Waypoint | null {
   const { address } = useWallet();
@@ -35,18 +37,21 @@ export function useEngagement(engagementId: string) {
     queryKey: ["engagement", engagementId],
     queryFn: () => (contract ? contract.getEngagement(engagementId) : Promise.resolve(null)),
     refetchOnWindowFocus: true,
+    refetchInterval: 20000,
     staleTime: 2000,
     enabled: !!contract && !!engagementId,
   });
 }
 
-export function useAllEngagementIds() {
+/** The newest engagement ids (one page from the end of the list, never the whole history). */
+export function useRecentEngagementIds(limit = 20) {
   const contract = useWaypointContract();
 
   return useQuery<string[], Error>({
-    queryKey: ["engagementIds"],
-    queryFn: () => (contract ? contract.getAllEngagementIds() : Promise.resolve([])),
+    queryKey: ["engagementIds", limit],
+    queryFn: () => (contract ? contract.getRecentEngagementIds(limit) : Promise.resolve([])),
     refetchOnWindowFocus: true,
+    refetchInterval: 30000,
     staleTime: 2000,
     enabled: !!contract,
   });
@@ -54,7 +59,7 @@ export function useAllEngagementIds() {
 
 export function useEngagementList() {
   const contract = useWaypointContract();
-  const idsQuery = useAllEngagementIds();
+  const idsQuery = useRecentEngagementIds();
 
   const listQuery = useQuery<Array<{ id: string; engagement: Engagement }>, Error>({
     queryKey: ["engagementList", idsQuery.data],
@@ -72,9 +77,11 @@ export function useEngagementList() {
   return { ...listQuery, isLoading: idsQuery.isLoading || listQuery.isLoading };
 }
 
+type Runner<TArgs> = (contract: Waypoint, args: TArgs, onProgress: (p: WriteProgress) => void) => Promise<string>;
+
 function useWriteAction<TArgs>(
-  action: (contract: Waypoint, args: TArgs, feePreset: any, onSubmitted: (h: string) => void) => Promise<string>,
-  successMessage: { title: string; description: string },
+  action: Runner<TArgs>,
+  messages: { confirmed: { title: string; description: string }; finalized?: { title: string; description: string } },
   errorTitle: string,
   getEngagementId: (args: TArgs) => string
 ) {
@@ -82,27 +89,38 @@ function useWriteAction<TArgs>(
   const { address } = useWallet();
   const queryClient = useQueryClient();
   const [isPending, setIsPending] = useState(false);
-  const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
+  const [progress, setProgress] = useState<WriteProgress | null>(null);
+
+  const refresh = (id: string) => {
+    queryClient.invalidateQueries({ queryKey: ["engagement", id] });
+    queryClient.invalidateQueries({ queryKey: ["engagementIds"] });
+    queryClient.invalidateQueries({ queryKey: ["engagementList"] });
+  };
 
   const mutation = useMutation({
     mutationFn: async (args: TArgs) => {
       if (!contract) throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_ADDRESS in your .env file.");
       if (!address) throw new Error("Wallet not connected. Please connect your wallet first.");
       setIsPending(true);
-      setPendingTxHash(null);
-      return action(contract, args, undefined, setPendingTxHash);
+      setProgress(null);
+      const id = getEngagementId(args);
+      return action(contract, args, (p) => {
+        setProgress(p);
+        if (p.stage === "finalized") {
+          refresh(id);
+          if (messages.finalized) success(messages.finalized.title, { description: messages.finalized.description });
+        }
+      });
     },
     onSuccess: (_data, args) => {
-      const engagementId = getEngagementId(args);
-      queryClient.invalidateQueries({ queryKey: ["engagement", engagementId] });
-      queryClient.invalidateQueries({ queryKey: ["engagementIds"] });
-      queryClient.invalidateQueries({ queryKey: ["engagementList"] });
+      refresh(getEngagementId(args));
       setIsPending(false);
-      success(successMessage.title, { description: successMessage.description });
+      success(messages.confirmed.title, { description: messages.confirmed.description });
     },
     onError: (err: any) => {
       console.error(errorTitle, err);
       setIsPending(false);
+      setProgress(null);
       error(errorTitle, { description: err?.message || "Please try again." });
     },
   });
@@ -110,35 +128,36 @@ function useWriteAction<TArgs>(
   return {
     ...mutation,
     isPending,
-    pendingTxHash,
-    clearPendingTx: () => setPendingTxHash(null),
+    progress,
+    clearProgress: () => setProgress(null),
     run: mutation.mutate,
   };
 }
 
-export interface CreateEngagementArgs {
-  id: string;
-  provider: string;
-  description: string;
-  url: string;
-  marker: string;
-  deadline: number;
-  amountWei: bigint;
-}
+const PAYS = "Funds are delivered when the transaction finalizes (about 30 minutes on Bradbury).";
 
 export function useCreateEngagement() {
-  return useWriteAction<CreateEngagementArgs>(
-    (c, a, fee, cb) => c.createEngagement(a.id, a.provider, a.description, a.url, a.marker, a.deadline, a.amountWei, fee, cb),
-    { title: "Engagement funded", description: "The escrow is live on-chain." },
+  return useWriteAction<CreateArgs>(
+    (c, a, onProgress) => c.createEngagement(a, { onProgress }),
+    { confirmed: { title: "Proposal funded", description: "The escrow is held. The provider must accept before work starts." } },
     "Failed to create engagement",
+    (a) => a.id
+  );
+}
+
+export function useAccept() {
+  return useWriteAction<{ id: string }>(
+    (c, a, onProgress) => c.accept(a.id, { onProgress }),
+    { confirmed: { title: "Accepted", description: "The provider agreed to the terms." } },
+    "Failed to accept",
     (a) => a.id
   );
 }
 
 export function useSubmitDeliverable() {
   return useWriteAction<{ id: string }>(
-    (c, a, fee, cb) => c.submit(a.id, fee, cb),
-    { title: "Submitted", description: "Marked ready for verification." },
+    (c, a, onProgress) => c.submit(a.id, { onProgress }),
+    { confirmed: { title: "Submitted", description: "Marked ready for verification." } },
     "Failed to submit",
     (a) => a.id
   );
@@ -146,17 +165,17 @@ export function useSubmitDeliverable() {
 
 export function useVerify() {
   return useWriteAction<{ id: string }>(
-    (c, a, fee, cb) => c.verify(a.id, fee, cb),
-    { title: "Verified", description: "Validators confirmed the marker is live." },
-    "Verification failed",
+    (c, a, onProgress) => c.verify(a.id, { onProgress }),
+    { confirmed: { title: "Verified", description: "Validators agreed the marker is a whole line of the page. The excerpt and its hash are recorded." } },
+    "Verification did not go through",
     (a) => a.id
   );
 }
 
 export function useChallenge() {
-  return useWriteAction<{ id: string; reason: string }>(
-    (c, a, fee, cb) => c.challenge(a.id, a.reason, fee, cb),
-    { title: "Challenge filed", description: "Escalated for reasoned review." },
+  return useWriteAction<{ id: string; reason: string; bondWei: bigint }>(
+    (c, a, onProgress) => c.challenge(a.id, a.reason, a.bondWei, { onProgress }),
+    { confirmed: { title: "Challenge filed", description: "Your bond is held until the dispute is resolved." } },
     "Failed to challenge",
     (a) => a.id
   );
@@ -164,8 +183,11 @@ export function useChallenge() {
 
 export function useResolveDispute() {
   return useWriteAction<{ id: string }>(
-    (c, a, fee, cb) => c.resolveDispute(a.id, fee, cb),
-    { title: "Dispute resolved", description: "Validators reached a verdict." },
+    (c, a, onProgress) => c.resolveDispute(a.id, { onProgress }),
+    {
+      confirmed: { title: "Verdict recorded", description: PAYS },
+      finalized: { title: "Dispute settled", description: "The transaction finalized and the payout was delivered." },
+    },
     "Failed to resolve dispute",
     (a) => a.id
   );
@@ -173,8 +195,11 @@ export function useResolveDispute() {
 
 export function useRelease() {
   return useWriteAction<{ id: string }>(
-    (c, a, fee, cb) => c.release(a.id, fee, cb),
-    { title: "Released", description: "Marked released to the provider." },
+    (c, a, onProgress) => c.release(a.id, { onProgress }),
+    {
+      confirmed: { title: "Release recorded", description: PAYS },
+      finalized: { title: "Released", description: "The transaction finalized and the provider was paid." },
+    },
     "Failed to release",
     (a) => a.id
   );
@@ -182,8 +207,11 @@ export function useRelease() {
 
 export function useReclaimStale() {
   return useWriteAction<{ id: string }>(
-    (c, a, fee, cb) => c.reclaimStale(a.id, fee, cb),
-    { title: "Recovered", description: "The stuck engagement was settled on-chain." },
+    (c, a, onProgress) => c.reclaimStale(a.id, { onProgress }),
+    {
+      confirmed: { title: "Recovery recorded", description: PAYS },
+      finalized: { title: "Recovered", description: "The transaction finalized and the funds were delivered." },
+    },
     "Failed to recover the engagement",
     (a) => a.id
   );
@@ -191,8 +219,11 @@ export function useReclaimStale() {
 
 export function useReclaimTimeout() {
   return useWriteAction<{ id: string }>(
-    (c, a, fee, cb) => c.reclaimTimeout(a.id, fee, cb),
-    { title: "Reclaimed", description: "Marked refunded to the client." },
+    (c, a, onProgress) => c.reclaimTimeout(a.id, { onProgress }),
+    {
+      confirmed: { title: "Reclaim recorded", description: PAYS },
+      finalized: { title: "Refunded", description: "The transaction finalized and the escrow was returned." },
+    },
     "Failed to reclaim",
     (a) => a.id
   );
