@@ -250,15 +250,19 @@ and run `npm install && npm run dev` in `frontend/`.
 
 ### Tested through the UI
 
-Besides the contract-level run above, the app itself was driven end to end on
-localhost against v4 with **separate client and provider wallets** (a headless
-browser with a small wallet shim that signs with the test wallets): `wp-ui-1`
-went create, accept, submit, verify, challenge (the bond sent was exactly the
-0.0002 GEN the dialog stated), resolve, released; `wp-ui-2` was created and then
-cancelled and reclaimed. Each wallet saw only the actions the contract allows
-it, each write showed signed, sent, accepted and *state confirmed*, and a
-fund-moving write showed the wait for finality. A write that Bradbury dropped
-was reported as a timeout instead of a success and was simply repeated.
+Besides the contract-level run, the app itself was driven end to end on
+localhost with **separate client and provider wallets** (a headless browser with
+a small wallet shim that signs with the test wallets). On the current contract
+(v5) `wp-ui-3` went create, accept, submit, verify, challenge (the bond sent was
+exactly the 0.0002 GEN the dialog stated), resolve (which showed "Upheld,
+Awaiting Settlement" and that no money had moved), then **Settle** and
+released. Earlier, on v4, `wp-ui-1` ran the whole lifecycle and `wp-ui-2` was
+created and then cancelled and reclaimed. Each wallet saw only the actions the
+contract allows it, each write showed signed, sent, accepted and *state
+confirmed*, and a fund-moving write showed the wait for finality. A write that
+Bradbury dropped was reported as a timeout instead of a success and was simply
+repeated. The contract's accounting was checked again after those transactions
+finalized and still passed.
 
 What that harness does **not** cover is a real MetaMask: it fakes the wallet's
 GenLayer Snap check that `client.connect()` performs. A run in a real wallet is
