@@ -104,7 +104,8 @@ type TrailNode = { key: string; label: string; state: "pending" | "reached" | "c
 function buildTrail(e: Engagement): TrailNode[] {
   const nodes: TrailNode[] = [
     {
-      key: "funded", label: e.status === "proposed" ? "Proposed" : "Accepted",
+      // a refunded engagement that never submitted may have been cancelled before the provider accepted, so say only what is certain
+      key: "funded", label: e.status === "proposed" ? "Proposed" : e.status === "refunded" && Number(e.submitted_at) === 0 ? "Funded" : "Accepted",
       state: e.status === "proposed" ? "current" : "reached", time: "—",
     },
     {
