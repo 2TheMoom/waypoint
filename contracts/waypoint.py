@@ -79,7 +79,6 @@ def _tag(low: str, i: int, n: int) -> str:
 
 
 def _lines(body: bytes) -> list:
-    """Page text as normalized lines, in one forward pass."""
     s = body[:2_000_000].decode("utf-8", errors="replace")
     low = s.lower()
     n = len(s)
@@ -118,7 +117,6 @@ def _lines(body: bytes) -> list:
 
 
 def _evidence(lines: list, marker: str, reject: str) -> dict:
-    """Whole lines only: containing, negating or quoting the marker never matches."""
     if reject != "" and reject in lines:
         return {"kind": "rejected", "excerpt": ""}
     if marker not in lines:
@@ -178,8 +176,6 @@ class Engagement:
 
 
 class Waypoint(gl.Contract):
-    """Milestone escrow: whole-line evidence, committed excerpt, challenge bond, stale-dispute split."""
-
     engagements: TreeMap[str, Engagement]
     engagement_ids: DynArray[str]
     payouts: TreeMap[str, u256]
@@ -197,7 +193,6 @@ class Waypoint(gl.Contract):
         return self.engagements[i]
 
     def _settle(self, i: str, e: Engagement, status: str, to_provider: int, to_client: int) -> None:
-        """Terminal status, each amount recorded once, each transfer emitted, in one transaction."""
         _bad(to_provider + to_client != int(e.amount) + int(e.bond), "Settlement does not match funds held")
         e.status = status
         for who, addr, amt in (("provider", e.provider, to_provider), ("client", e.client, to_client)):
@@ -239,7 +234,6 @@ class Waypoint(gl.Contract):
 
     @gl.public.write
     def accept(self, engagement_id: str) -> None:
-        """The provider agrees to the terms before any work starts."""
         e = self._get(engagement_id)
         _bad(gl.message.sender_address != e.provider, "Only the provider can accept")
         _bad(e.status != "proposed", f"Not awaiting acceptance (status: {e.status})")
@@ -292,7 +286,6 @@ class Waypoint(gl.Contract):
 
     @gl.public.write.payable
     def challenge(self, engagement_id: str, reason: str) -> None:
-        """The client disputes a verified deliverable, posting a bond (10% of the escrow) lost if the objection fails."""
         e = self._get(engagement_id)
         _bad(gl.message.sender_address != e.client, "Only the client can challenge")
         _bad(e.status != "verified", f"Not challengeable (status: {e.status})")
@@ -350,14 +343,21 @@ class Waypoint(gl.Contract):
 
     @gl.public.write
     def resolve_dispute(self, engagement_id: str) -> None:
-        """uphold: provider gets escrow + bond. overturn: client gets escrow + bond. Unclear: nothing changes."""
+        """Records the verdict only (upheld or overturned); settle() pays it. Unclear: nothing changes."""
         e = self._get(engagement_id)
         _bad(e.status != "disputed", f"Not under dispute (status: {e.status})")
         r = self._judge(e)
-        _bad(r["verdict"] not in ("uphold", "overturn"), "No clear verdict (page unreadable or too large, or evidence unclear). Retry or wait for stale recovery.")
+        _bad(r["verdict"] not in ("uphold", "overturn"), "No clear verdict (unreadable, too large or unclear). Retry or wait for stale recovery.")
         e.resolution_note = r["reasoning"]
+        e.status = "upheld" if r["verdict"] == "uphold" else "overturned"
+
+    @gl.public.write
+    def settle(self, engagement_id: str) -> None:
+        """Pays a recorded verdict. Kept out of resolve_dispute so no transfer shares a transaction with the model call."""
+        e = self._get(engagement_id)
+        _bad(e.status not in ("upheld", "overturned"), f"No verdict to settle (status: {e.status})")
         total = int(e.amount) + int(e.bond)
-        if r["verdict"] == "uphold":
+        if e.status == "upheld":
             self._settle(engagement_id, e, "released", total, 0)
         else:
             self._settle(engagement_id, e, "refunded", 0, total)
@@ -371,7 +371,6 @@ class Waypoint(gl.Contract):
 
     @gl.public.write
     def reclaim_timeout(self, engagement_id: str) -> None:
-        """Refund an unaccepted proposal at any time, or an accepted one whose deadline passed with no submission."""
         e = self._get(engagement_id)
         _bad(gl.message.sender_address != e.client, "Only the client can reclaim")
         _bad(e.status not in ("funded", "proposed"), f"Not awaiting submission (status: {e.status})")
@@ -414,14 +413,12 @@ class Waypoint(gl.Contract):
 
     @gl.public.view
     def get_engagement_ids(self, offset: int, limit: int) -> list:
-        """At most 50 ids, oldest first. Never reverts."""
         if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0 or isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
             return []
         return [self.engagement_ids[k] for k in range(offset, min(offset + min(limit, PAGE), len(self.engagement_ids)))]
 
     @gl.public.view
     def get_accounting(self) -> dict:
-        """Balance vs what is still owed; in_flight = payouts awaiting finality."""
         bal = int(self.balance)
         owed = int(self.total_received) - int(self.total_scheduled)
         return {

@@ -1,2 +1,3 @@
 Release notes
-The Q3 pricing release was pulled from production and is being reworked
+Q3 pricing release shipped to production 2026
+Migration guide published at docs/migrate

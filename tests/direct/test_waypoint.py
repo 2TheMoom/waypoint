@@ -516,7 +516,7 @@ def test_challenge_after_window_fails(direct_vm, direct_deploy, direct_alice, di
 # ---------------------------------------------------------------------------
 
 
-def test_uphold_pays_provider_escrow_and_bond(direct_vm, direct_deploy, direct_alice, direct_bob):
+def test_uphold_records_the_verdict_and_settle_pays_provider_escrow_and_bond(direct_vm, direct_deploy, direct_alice, direct_bob):
     c = direct_deploy(CONTRACT)
     sends = _capture_sends(direct_vm)
     direct_vm.warp(T0)
@@ -524,18 +524,70 @@ def test_uphold_pays_provider_escrow_and_bond(direct_vm, direct_deploy, direct_a
     _judge(direct_vm, "uphold")
     c.resolve_dispute("wp-1")
     e = c.get_engagement("wp-1")
-    assert e["status"] == "released" and e["resolution_note"] == "because"
+    assert e["status"] == "upheld" and e["resolution_note"] == "because"
+    assert sends == []  # the verdict transaction, which runs the model, moves no money
+    c.settle("wp-1")
+    assert c.get_engagement("wp-1")["status"] == "released"
     assert sends == [(_hex(direct_bob), 1100)]
 
 
-def test_overturn_refunds_client_escrow_and_bond(direct_vm, direct_deploy, direct_alice, direct_bob):
+def test_overturn_records_the_verdict_and_settle_refunds_client_escrow_and_bond(direct_vm, direct_deploy, direct_alice, direct_bob):
     c = direct_deploy(CONTRACT)
     sends = _capture_sends(direct_vm)
     direct_vm.warp(T0)
     _to_disputed(direct_vm, c, direct_alice, direct_bob)
     _judge(direct_vm, "overturn")
     c.resolve_dispute("wp-1")
+    assert c.get_engagement("wp-1")["status"] == "overturned"
+    assert sends == []
+    c.settle("wp-1")
     assert c.get_engagement("wp-1")["status"] == "refunded"
+    assert sends == [(_hex(direct_alice), 1100)]
+
+
+def test_settle_is_permissionless_pays_once_and_needs_a_verdict(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    c = direct_deploy(CONTRACT)
+    sends = _capture_sends(direct_vm)
+    direct_vm.warp(T0)
+    _to_disputed(direct_vm, c, direct_alice, direct_bob)
+    direct_vm.sender = direct_charlie
+    with direct_vm.expect_revert("No verdict to settle"):
+        c.settle("wp-1")  # still disputed
+    _judge(direct_vm, "uphold")
+    c.resolve_dispute("wp-1")
+    c.settle("wp-1")
+    with direct_vm.expect_revert("No verdict to settle"):
+        c.settle("wp-1")
+    assert sends == [(_hex(direct_bob), 1100)]
+
+
+def test_no_other_status_can_be_settled(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    sends = _capture_sends(direct_vm)
+    direct_vm.warp(T0)
+    _create(direct_vm, c, direct_alice, direct_bob, eid="p")
+    _to_verified(direct_vm, c, direct_alice, direct_bob, eid="v")
+    for eid in ("p", "v"):
+        with direct_vm.expect_revert("No verdict to settle"):
+            c.settle(eid)
+    assert sends == []
+
+
+def test_a_recorded_verdict_blocks_every_other_payout_path(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    sends = _capture_sends(direct_vm)
+    direct_vm.warp(T0)
+    _to_disputed(direct_vm, c, direct_alice, direct_bob)
+    _judge(direct_vm, "overturn")
+    c.resolve_dispute("wp-1")
+    direct_vm.warp("2026-03-01T00:00:00Z")
+    direct_vm.sender = direct_alice
+    for call in (lambda: c.release("wp-1"), lambda: c.reclaim_timeout("wp-1"), lambda: c.reclaim_stale("wp-1"),
+                 lambda: c.resolve_dispute("wp-1"), lambda: c.challenge("wp-1", REASON)):
+        with direct_vm.expect_revert():
+            call()
+    assert sends == []
+    c.settle("wp-1")
     assert sends == [(_hex(direct_alice), 1100)]
 
 
@@ -547,6 +599,7 @@ def test_resolve_is_permissionless(direct_vm, direct_deploy, direct_alice, direc
     _judge(direct_vm, "uphold")
     direct_vm.sender = direct_charlie
     c.resolve_dispute("wp-1")
+    c.settle("wp-1")
     assert sends == [(_hex(direct_bob), 1100)]
 
 
@@ -584,7 +637,7 @@ def test_verdict_inside_prose_is_parsed(direct_vm, direct_deploy, direct_alice, 
     _to_disputed(direct_vm, c, direct_alice, direct_bob)
     _judge(direct_vm, "", reply='Sure! {"verdict": "overturn", "reasoning": "old table"} done')
     c.resolve_dispute("wp-1")
-    assert c.get_engagement("wp-1")["status"] == "refunded"
+    assert c.get_engagement("wp-1")["status"] == "overturned"
 
 
 def test_oversized_page_is_never_judged_partially(direct_vm, direct_deploy, direct_alice, direct_bob):
@@ -790,9 +843,11 @@ def test_settled_engagement_cannot_be_paid_again_by_any_path(direct_vm, direct_d
     _to_disputed(direct_vm, c, direct_alice, direct_bob)
     _judge(direct_vm, "uphold")
     c.resolve_dispute("wp-1")
+    c.settle("wp-1")
     direct_vm.warp("2026-03-01T00:00:00Z")
     direct_vm.sender = direct_alice
     for call in (
+        lambda: c.settle("wp-1"),
         lambda: c.resolve_dispute("wp-1"),
         lambda: c.release("wp-1"),
         lambda: c.reclaim_timeout("wp-1"),
@@ -815,6 +870,7 @@ def test_every_terminal_path_pays_exactly_the_funds_held(direct_vm, direct_deplo
     _to_disputed(direct_vm, c, direct_alice, direct_bob, eid="c", value=333, bond=33)
     _judge(direct_vm, "overturn")
     c.resolve_dispute("b")
+    c.settle("b")
     direct_vm.warp(AFTER_STALE)
     c.reclaim_stale("c")
     c.release("a")

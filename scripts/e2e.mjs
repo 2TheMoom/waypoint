@@ -17,10 +17,10 @@ import { spawnSync } from "child_process";
 import { createAccount, createClient } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
 
-const CONTRACT = process.env.WAYPOINT || "0xD55b22525742C0e1BF570694215f12bE58eD52D4";
+const CONTRACT = process.env.WAYPOINT || "0xADABCcE75EdAC0b6d5799d1AB5a50981043a07db";
 const RAW = "https://raw.githubusercontent.com/2TheMoom/waypoint/main/demo/evidence/";
 const RUN = Date.now().toString(36);
-const LOGFILE = process.env.E2E_LOG || "scripts/e2e-log-v4.json";
+const LOGFILE = process.env.E2E_LOG || "scripts/e2e-log-v5.json";
 const AMOUNT = 2000000000000000n; // 0.002 GEN
 const BOND = AMOUNT / 10n;
 const WINDOW = 3600;
@@ -153,16 +153,22 @@ async function challenge(scn, id, who, reason) {
 }
 
 // resolve_dispute can legitimately fail (model unsure, consensus split): retry, and record every attempt.
+// It only RECORDS the verdict (upheld / overturned) and moves no money; settle() then pays it in its own transaction.
 async function resolve(scn, id, who, want) {
   for (let a = 1; a <= 6; a++) {
     const t = await send(scn, who, "resolve_dispute", [id]);
     await sleep(20000);
-    const e = await eng(id);
-    if (e.status !== "disputed") {
-      log(scn, `dispute resolved on attempt ${a}: status=${e.status} note="${e.resolution_note}"`, { attempts: a, status: e.status, note: e.resolution_note });
-      return { t, e, attempts: a };
+    let e = await eng(id);
+    if (e.status === "disputed") {
+      log(scn, `attempt ${a} left the dispute open (${t.exec}/${t.result})`);
+      continue;
     }
-    log(scn, `attempt ${a} left the dispute open (${t.exec}/${t.result})`);
+    log(scn, `verdict recorded on attempt ${a}: status=${e.status} note="${e.resolution_note}"`, { attempts: a, status: e.status, note: e.resolution_note });
+    const early = (await read("get_accounting")).total_scheduled;
+    const st = await send(scn, who, "settle", [id]);
+    e = await until(scn, "settled", id, (x) => x.status === "released" || x.status === "refunded");
+    log(scn, `settled: status=${e.status} (scheduled before settle ${early})`, { settled: e.status });
+    return { t: st, e, attempts: a };
   }
   throw new Error(`${scn}: dispute never resolved`);
 }
@@ -298,6 +304,12 @@ settled.forEach((s, i) => {
 });
 LOG.results = results;
 LOG.accounting = await read("get_accounting");
+{
+  const a = LOG.accounting;
+  const ok = Number(a.shortfall) === 0 && Number(a.in_flight) === 0 && BigInt(a.balance) === BigInt(a.unscheduled);
+  LOG.accountingOk = ok;
+  log("accounting", ok ? "OK: nothing in flight, nothing short, balance equals what is still owed" : `MISMATCH: ${JSON.stringify(a)}`);
+}
 LOG.finished = new Date().toISOString();
 writeFileSync(LOGFILE, JSON.stringify(LOG, null, 1));
 console.log("\nRESULTS", JSON.stringify(results, null, 1), "\nACCOUNTING", JSON.stringify(LOG.accounting));
