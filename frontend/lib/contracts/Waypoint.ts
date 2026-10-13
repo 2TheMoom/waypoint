@@ -220,6 +220,11 @@ class Waypoint {
     return this.submitWrite("resolve_dispute", [id], { ...opts, action: "resolve_dispute", engagementId: id });
   }
 
+  /** Pays a verdict that resolve_dispute recorded. Permissionless; the transfer lands when this transaction finalizes. */
+  async settle(id: string, opts: Omit<WriteOptions, "action" | "engagementId"> = {}) {
+    return this.submitWrite("settle", [id], { ...opts, action: "settle", engagementId: id });
+  }
+
   async release(id: string, opts: Omit<WriteOptions, "action" | "engagementId"> = {}) {
     return this.submitWrite("release", [id], { ...opts, action: "release", engagementId: id });
   }

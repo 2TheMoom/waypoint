@@ -72,7 +72,8 @@ rather than a generic modal dialog.
   window (1 hour to 7 days) by posting a bond of exactly 10% of the escrow.
   Anyone can resolve the dispute; reviewers weigh the objection against the
   committed excerpt and the page as it reads now, and an unclear answer
-  changes nothing.
+  changes nothing. Resolving only records the verdict (upheld or overturned);
+  **Settle**, which anyone can send, pays it in a separate transaction.
 - **Release / Reclaim**: pay the provider once the window closes, or let the
   client reclaim an unaccepted proposal, or an accepted one that missed its
   deadline.

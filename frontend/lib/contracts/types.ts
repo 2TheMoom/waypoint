@@ -8,6 +8,8 @@ export type EngagementStatus =
   | "submitted"
   | "verified"
   | "disputed"
+  | "upheld"
+  | "overturned"
   | "released"
   | "refunded"
   | "split";

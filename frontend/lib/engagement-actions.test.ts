@@ -149,6 +149,16 @@ describe("availableActions follows the contract's access rules", () => {
     assert.deepEqual(act(e, null, T + 2 * HOUR), []);
   });
 
+  it("a recorded verdict can only be settled, by anyone connected", () => {
+    for (const status of ["upheld", "overturned"] as const) {
+      const e = engagement({ status });
+      assert.deepEqual(act(e, STRANGER, T), ["settle"]);
+      assert.deepEqual(act(e, CLIENT, T), ["settle"]);
+      assert.deepEqual(act(e, null, T), []);
+      assert.deepEqual(availableActions(e, { address: CLIENT, now: T + 1e9 }), ["settle"]); // no timeout path out of a verdict
+    }
+  });
+
   it("stuck submission: only the client can recover it", () => {
     const e = engagement({ status: "submitted", stale_at: String(T + 3600 + 2 * HOUR) });
     const stale = T + 3600 + 2 * HOUR;
@@ -183,12 +193,18 @@ describe("write confirmation", () => {
     assert.ok(!expectedStatus("accept")(engagement({ status: "proposed" })));
     assert.ok(expectedStatus("challenge")(engagement({ status: "disputed" })));
     assert.ok(!expectedStatus("resolve_dispute")(engagement({ status: "disputed" })));
-    assert.ok(expectedStatus("resolve_dispute")(engagement({ status: "refunded" })));
+    assert.ok(expectedStatus("resolve_dispute")(engagement({ status: "upheld" })));
+    assert.ok(expectedStatus("resolve_dispute")(engagement({ status: "overturned" })));
+    assert.ok(!expectedStatus("resolve_dispute")(engagement({ status: "released" })));
+    assert.ok(expectedStatus("settle")(engagement({ status: "released" })));
+    assert.ok(expectedStatus("settle")(engagement({ status: "refunded" })));
+    assert.ok(!expectedStatus("settle")(engagement({ status: "upheld" })));
     assert.ok(expectedStatus("reclaim_stale")(engagement({ status: "split" })));
   });
   it("only fund-moving actions wait for finality", () => {
-    assert.ok(movesFunds("release") && movesFunds("resolve_dispute") && movesFunds("reclaim_stale") && movesFunds("reclaim_timeout"));
-    assert.ok(!movesFunds("verify") && !movesFunds("accept") && !movesFunds("create"));
+    assert.ok(movesFunds("release") && movesFunds("settle") && movesFunds("reclaim_stale") && movesFunds("reclaim_timeout"));
+    // resolve_dispute runs the model and only records a verdict: no transfer may share its transaction
+    assert.ok(!movesFunds("resolve_dispute") && !movesFunds("verify") && !movesFunds("accept") && !movesFunds("create"));
   });
 });
 

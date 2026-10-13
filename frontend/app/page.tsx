@@ -13,6 +13,7 @@ import {
   useVerify,
   useChallenge,
   useResolveDispute,
+  useSettle,
   useRelease,
   useReclaimTimeout,
   useReclaimStale,
@@ -124,6 +125,8 @@ function buildTrail(e: Engagement): TrailNode[] {
 
   if (e.status === "disputed") {
     nodes.push({ key: "disputed", label: "Disputed", state: "branch", time: "—" });
+  } else if (e.status === "upheld" || e.status === "overturned") {
+    nodes.push({ key: e.status, label: e.status === "upheld" ? "Upheld" : "Overturned", state: "branch", time: "—" });
   } else if (e.status === "released") {
     nodes.push({ key: "released", label: "Released", state: "current", time: "—" });
   } else if (e.status === "refunded") {
@@ -153,6 +156,8 @@ function statusLabel(e: Engagement, now: number): string {
       return isChallengeOpen(e, now) ? "Verified · Challenge Window" : "Verified · Ready To Release";
     }
     case "disputed": return "Disputed · Awaiting Resolution";
+    case "upheld": return "Upheld · Awaiting Settlement";
+    case "overturned": return "Overturned · Awaiting Settlement";
     case "released": return "Released";
     case "refunded": return "Refunded";
     case "split": return "Split · Dispute Not Adjudicated";
@@ -377,6 +382,7 @@ function EngagementHero({ id }: { id: string }) {
   const submitAction = useSubmitDeliverable();
   const verifyAction = useVerify();
   const resolveAction = useResolveDispute();
+  const settleAction = useSettle();
   const releaseAction = useRelease();
   const reclaimAction = useReclaimTimeout();
   const staleAction = useReclaimStale();
@@ -398,7 +404,7 @@ function EngagementHero({ id }: { id: string }) {
   const challengeCloses = Number(e.challenge_deadline);
   const challengeOpen = isChallengeOpen(e, now);
   const staleAt = Number(e.stale_at);
-  const all = [acceptAction, submitAction, verifyAction, resolveAction, releaseAction, reclaimAction, staleAction];
+  const all = [acceptAction, submitAction, verifyAction, resolveAction, settleAction, releaseAction, reclaimAction, staleAction];
   // the action that reported progress most recently, not the first hook that ever did
   const active = all.filter((a) => a.progress).sort((x, y) => (y.progress?.at ?? 0) - (x.progress?.at ?? 0))[0];
 
@@ -515,6 +521,11 @@ function EngagementHero({ id }: { id: string }) {
             {resolveAction.isPending ? "Resolving…" : "Resolve Dispute"}
           </button>
         )}
+        {actions.includes("settle") && (
+          <button className="btn-field solid" disabled={settleAction.isPending} onClick={() => settleAction.run({ id })}>
+            {settleAction.isPending ? "Settling…" : e.status === "upheld" ? "Settle: Pay The Provider" : "Settle: Refund The Client"}
+          </button>
+        )}
         {actions.includes("reclaim_stale") && stale && (
           <button className="btn-field danger" disabled={staleAction.isPending} onClick={() => staleAction.run({ id })}>
             {staleAction.isPending ? "Recovering…" : staleOutcome(stale).label}
@@ -524,6 +535,12 @@ function EngagementHero({ id }: { id: string }) {
       </div>
 
       {active && <TxProgress progress={active.progress} pending={active.isPending} />}
+
+      {(e.status === "upheld" || e.status === "overturned") && (
+        <div className="mt-4 font-mono text-xs" style={{ color: "var(--ink-faint)" }}>
+          The verdict is recorded but no money has moved. Settling is a separate transaction that anyone can send; the funds arrive when it finalizes.
+        </div>
+      )}
 
       {e.status === "disputed" && !stale && (
         <div className="mt-4 font-mono text-xs" style={{ color: "var(--ink-faint)" }}>

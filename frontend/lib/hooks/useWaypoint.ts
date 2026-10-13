@@ -184,11 +184,20 @@ export function useChallenge() {
 export function useResolveDispute() {
   return useWriteAction<{ id: string }>(
     (c, a, onProgress) => c.resolveDispute(a.id, { onProgress }),
-    {
-      confirmed: { title: "Verdict recorded", description: PAYS },
-      finalized: { title: "Dispute settled", description: "The transaction finalized and the payout was delivered." },
-    },
+    { confirmed: { title: "Verdict recorded", description: "No money has moved yet. Anyone can now settle it to send the funds." } },
     "Failed to resolve dispute",
+    (a) => a.id
+  );
+}
+
+export function useSettle() {
+  return useWriteAction<{ id: string }>(
+    (c, a, onProgress) => c.settle(a.id, { onProgress }),
+    {
+      confirmed: { title: "Settlement recorded", description: PAYS },
+      finalized: { title: "Settled", description: "The transaction finalized and the funds were delivered." },
+    },
+    "Failed to settle",
     (a) => a.id
   );
 }

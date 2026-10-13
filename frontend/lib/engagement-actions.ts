@@ -10,6 +10,7 @@ export type EngagementAction =
   | "release"
   | "challenge"
   | "resolve_dispute"
+  | "settle"
   | "reclaim_stale";
 
 export interface ActionContext {
@@ -52,7 +53,9 @@ export function challengeOpen(e: Engagement, now: number): boolean {
  *  - verify: permissionless
  *  - release: permissionless, once the challenge window has closed
  *  - challenge: client only, inside the challenge window, with a bond
- *  - resolve_dispute: permissionless
+ *  - resolve_dispute: permissionless; only records the verdict (upheld or
+ *    overturned) and moves no money
+ *  - settle: permissionless; pays a recorded verdict in its own transaction
  *  - reclaim_stale: a stuck dispute is permissionless (it splits the escrow
  *    and returns the bond); a stuck submission is client only (it refunds)
  */
@@ -72,6 +75,7 @@ export function availableActions(e: Engagement, ctx: ActionContext): EngagementA
   if (e.status === "verified" && !open && connected) actions.push("release");
   if (e.status === "verified" && open && isClient) actions.push("challenge");
   if (e.status === "disputed" && connected) actions.push("resolve_dispute");
+  if ((e.status === "upheld" || e.status === "overturned") && connected) actions.push("settle");
 
   const stale = staleKind(e, ctx.now);
   if (stale === "disputed" && connected) actions.push("reclaim_stale");
@@ -105,12 +109,16 @@ export function expectedStatus(action: EngagementAction | "create", before?: Eng
     case "reclaim_timeout": return (e) => e.status === "refunded";
     case "reclaim_stale": return (e) => e.status === "refunded" || e.status === "split";
     // an inconclusive verdict reverts, so a dispute that is still "disputed" means nothing changed
-    case "resolve_dispute": return (e) => e.status === "released" || e.status === "refunded";
+    case "resolve_dispute": return (e) => e.status === "upheld" || e.status === "overturned";
+    case "settle": return (e) => e.status === "released" || e.status === "refunded";
     default: return () => true;
   }
 }
 
-/** True for actions that move funds: the transfer only lands when the transaction finalizes. */
+/**
+ * True for actions that move funds: the transfer only lands when the transaction finalizes.
+ * resolve_dispute is deliberately not one of them: it runs the model and only records a verdict.
+ */
 export function movesFunds(action: EngagementAction | "create" | "challenge"): boolean {
-  return action === "release" || action === "reclaim_timeout" || action === "reclaim_stale" || action === "resolve_dispute";
+  return action === "release" || action === "reclaim_timeout" || action === "reclaim_stale" || action === "settle";
 }
