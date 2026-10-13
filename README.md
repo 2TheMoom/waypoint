@@ -80,10 +80,13 @@ as it was so it can be retried.
   if it fails the provider receives both. Frivolous challenges cost something.
 - If a dispute is not adjudicated within `stale_after`, `reclaim_stale` is open
   to anyone and **splits the escrow evenly** between provider and client, and
-  **returns the bond** to the client. The provider is not paid in full for work
-  that was never confirmed, and the client cannot hold the funds forever by
-  filing and walking away. (A stuck *submission* still refunds the client, and
-  only the client can trigger it.)
+  the **bond goes to the provider**. The provider is not paid in full for work
+  that was never confirmed, the client cannot hold the funds forever by filing
+  and walking away, and a challenge that nobody pursued to a verdict is not
+  free. Resolving a dispute is permissionless, so a genuine challenger can
+  push the verdict as often as the provider can during the whole recovery time.
+  (A stuck *submission* still refunds the client, and only the client can
+  trigger it.)
 - Windows are bounded on chain: challenge window 1 hour to 7 days, recovery
   time 2 hours to 30 days. The one hour floor is deliberately above the
   roughly 28 to 30 minute finality measured on Bradbury, so a challenge can
@@ -221,7 +224,7 @@ and run `npm install && npm run dev` in `frontend/`.
 | `resolve_dispute` | anyone | uphold or overturn; anything unclear changes nothing |
 | `release` | anyone | after the window, pays the provider |
 | `reclaim_timeout` | client | unaccepted proposal any time, accepted one after the deadline |
-| `reclaim_stale` | client (stuck submission) / anyone (stuck dispute) | refund / even split plus bond back |
+| `reclaim_stale` | client (stuck submission) / anyone (stuck dispute) | refund / even split, bond to the provider |
 | `get_engagement`, `get_engagement_count`, `get_engagement_ids`, `get_accounting` | view | ids are paged, at most 50 |
 
 ## Community

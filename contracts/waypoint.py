@@ -380,7 +380,7 @@ class Waypoint(gl.Contract):
 
     @gl.public.write
     def reclaim_stale(self, engagement_id: str) -> None:
-        """Stuck submission: refund the client. Stuck dispute: split the escrow evenly, return the bond."""
+        """Stuck submission: refund the client. Stuck dispute: split the escrow evenly, the bond goes to the provider."""
         e = self._get(engagement_id)
         now = self._now()
         sub = e.status == "submitted" and now >= int(e.deadline) + int(e.stale_after)
@@ -388,7 +388,7 @@ class Waypoint(gl.Contract):
         _bad(not sub and not dis, f"Not eligible for stale recovery yet (status: {e.status})")
         if dis:
             half = int(e.amount) // 2
-            self._settle(engagement_id, e, "split", half, int(e.amount) - half + int(e.bond))
+            self._settle(engagement_id, e, "split", half + int(e.bond), int(e.amount) - half)
         else:
             _bad(gl.message.sender_address != e.client, "Only the client can reclaim a stuck submission")
             self._settle(engagement_id, e, "refunded", 0, int(e.amount))

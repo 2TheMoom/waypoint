@@ -350,7 +350,7 @@ function ChallengeDialog({ engagement, engagementId }: { engagement: Engagement;
           <div className="font-mono text-xs mt-3" style={{ color: "var(--ink-faint)" }}>
             Filing posts a bond of exactly <span style={{ color: "var(--brass-bright)" }}>{formatGen(bond.toString())} GEN</span> (10% of the escrow).
             If the objection is upheld you get the escrow and the bond back. If it fails, the provider receives both. If nobody can
-            adjudicate it in time, the escrow is split and your bond is returned.
+            adjudicate it in time, the escrow is split evenly and your bond goes to the provider, so anyone can push a verdict by resolving the dispute.
           </div>
         </div>
         <DialogFooter className="mt-4">

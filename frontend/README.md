@@ -78,7 +78,7 @@ rather than a generic modal dialog.
   deadline.
 - **Recover stuck engagements**: after the engagement's recovery time, a stuck
   submission is refunded to the client (client only) and a stuck dispute is
-  split evenly with the bond returned (any connected account).
+  split evenly with the bond going to the provider (any connected account).
 - **Honest transaction status**: a write shows signed, sent, accepted, then
   *state confirmed* once the engagement reads back changed. Fund-moving writes
   keep watching until the transaction is FINALIZED (about 30 minutes on

@@ -739,7 +739,7 @@ def test_stale_submission_refunds_client_only(direct_vm, direct_deploy, direct_a
     assert c.get_engagement("wp-1")["status"] == "refunded"
 
 
-def test_stale_dispute_splits_evenly_and_returns_bond(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+def test_stale_dispute_splits_evenly_and_bond_goes_to_the_provider(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     c = direct_deploy(CONTRACT)
     sends = _capture_sends(direct_vm)
     direct_vm.warp(T0)
@@ -751,7 +751,8 @@ def test_stale_dispute_splits_evenly_and_returns_bond(direct_vm, direct_deploy, 
     direct_vm.warp("2026-01-01T02:00:00Z")  # exactly disputed_at + stale_after
     c.reclaim_stale("wp-1")  # permissionless
     assert c.get_engagement("wp-1")["status"] == "split"
-    assert sorted(sends) == sorted([(_hex(direct_bob), 500), (_hex(direct_alice), 600)])
+    # provider: half the escrow plus the forfeited bond; client: the other half
+    assert sorted(sends) == sorted([(_hex(direct_bob), 600), (_hex(direct_alice), 500)])
     with direct_vm.expect_revert("Not eligible"):
         c.reclaim_stale("wp-1")
 
@@ -763,7 +764,7 @@ def test_stale_dispute_odd_amount_loses_nothing(direct_vm, direct_deploy, direct
     _to_disputed(direct_vm, c, direct_alice, direct_bob, value=1001, bond=100)
     direct_vm.warp(AFTER_STALE)
     c.reclaim_stale("wp-1")
-    assert sorted(sends) == sorted([(_hex(direct_bob), 500), (_hex(direct_alice), 601)])
+    assert sorted(sends) == sorted([(_hex(direct_bob), 600), (_hex(direct_alice), 501)])
     assert sum(v for _, v in sends) == 1101
 
 

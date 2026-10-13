@@ -172,8 +172,8 @@ describe("staleKind and wording", () => {
   });
   it("names the split, not a release, for a stuck dispute", () => {
     assert.match(staleOutcome("disputed").note, /split evenly/);
-    assert.match(staleOutcome("disputed").note, /bond is returned/);
-    assert.doesNotMatch(staleOutcome("disputed").note, /releases to the provider/);
+    assert.match(staleOutcome("disputed").note, /bond goes to the provider/);
+    assert.doesNotMatch(staleOutcome("disputed").note, /bond is returned/);
   });
 });
 

@@ -85,7 +85,7 @@ export function staleOutcome(kind: StaleKind): { label: string; note: string } {
   return kind === "disputed"
     ? {
         label: "Split Stuck Dispute",
-        note: "Nobody could adjudicate this dispute in time. The escrow is split evenly between provider and client, and the client's bond is returned. Anyone can trigger it.",
+        note: "Nobody could adjudicate this dispute in time. The escrow is split evenly between provider and client, and the client's bond goes to the provider. Anyone can trigger it.",
       }
     : {
         label: "Recover Stuck Submission",
