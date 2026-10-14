@@ -1,0 +1,3 @@
+Release notes
+wp6-overturn: Q3 pricing release shipped to production 2026
+Known gap: the migration guide is not written yet and was not published with this release

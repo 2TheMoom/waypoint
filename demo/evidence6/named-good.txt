@@ -1,0 +1,3 @@
+Release notes
+wp6-named: Q3 pricing release shipped to production 2026
+Migration guide published at docs/migrate
