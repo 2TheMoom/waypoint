@@ -264,9 +264,27 @@ Bradbury dropped was reported as a timeout instead of a success and was simply
 repeated. The contract's accounting was checked again after those transactions
 finalized and still passed.
 
-What that harness does **not** cover is a real MetaMask: it fakes the wallet's
-GenLayer Snap check that `client.connect()` performs. A run in a real wallet is
-still the final test of that step.
+### Tested on the live site with a real MetaMask
+
+The harness above fakes the wallet, so the same lifecycle was also run on the
+**live site with a real MetaMask and two accounts** (a separate client and
+provider, both ordinary MetaMask accounts). MetaMask asked for the account, to
+add the Bradbury network, and to install the **GenLayer Snap**, all of which were
+approved. Engagement `wp-live-1` then went create (client), accept and submit
+(provider), verify, challenge with the exact 0.0002 GEN bond (client), resolve,
+and settle. The app showed the provider only Accept and Submit, and the client
+only Cancel and Challenge, as the contract allows. The provider's balance rose by
+exactly **0.0022 GEN** (escrow plus the forfeited bond) when the settlement
+finalized, the app showed "Finalized, funds delivered", and the contract's
+accounting still ended with nothing in flight or short.
+
+One finding from that run: the first two `resolve_dispute` attempts ended in
+**LEADER TIMEOUT** on the validators' side (the model call ran long), so nothing
+was recorded. MetaMask still showed those transactions as confirmed, because it
+only knows the transaction was included on chain. The app correctly refused to
+call it done (the engagement still read Disputed) and said so; it now names the
+cause (validators timed out, nothing recorded, try again). The third attempt
+recorded the verdict.
 
 ## Methods
 
