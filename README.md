@@ -331,6 +331,19 @@ Bradbury dropped was reported as a timeout instead of a success and was simply
 repeated. The contract's accounting was checked again after those transactions
 finalized and still passed.
 
+### Tested through the UI on v6 (finality for every write)
+
+On the v6 contract the app was driven again on localhost with separate client and
+provider wallets (same wallet shim as above). The create form refused a marker
+without the engagement id ("must contain the Engagement ID", and Fund Escrow
+stayed disabled), then created `wp6-ui-1` once the marker named it. The
+provider's Accept button showed the digest of the terms it records, and the
+accept, submit and verify writes each showed "recorded, not final yet" on the
+engagement, with two writes waiting at once, and **no success message**. About
+30 minutes later the app read the finalized receipts, found the GenVM results
+successful and the engagement in the expected state, showed "Finalized, result
+confirmed" and cleared the indicators.
+
 ### Tested on the live site with a real MetaMask
 
 The harness above fakes the wallet, so the same lifecycle was also run on the
