@@ -41,5 +41,6 @@ export function decodeEngagement(raw: any): Engagement {
     resolution_note: s(obj.resolution_note, ""),
     challenge_deadline: s(obj.challenge_deadline),
     stale_at: s(obj.stale_at),
+    terms_hash: s(obj.terms_hash, ""),
   };
 }

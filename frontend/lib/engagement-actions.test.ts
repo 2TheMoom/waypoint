@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { decodeEngagement } from "./contracts/decode.ts";
 import type { Engagement } from "./contracts/types.ts";
-import { availableActions, challengeOpen, expectedStatus, movesFunds, staleKind, staleOutcome } from "./engagement-actions.ts";
+import { availableActions, challengeOpen, expectedStatus, finalStatus, movesFunds, staleKind, staleOutcome } from "./engagement-actions.ts";
 import { failedReceiptMessage } from "./receipt.ts";
-import { formatGen, BOND_BPS, MAX_MARKER, MAX_STALE, MAX_WINDOW, MIN_MARKER, MIN_STALE, MIN_WINDOW, markerProblem, normalizeLine, requiredBond, urlProblem } from "./limits.ts";
+import { formatGen, BOND_BPS, MAX_MARKER, MAX_PAGE_BYTES, MAX_STALE, MAX_WINDOW, MIN_MARKER, MIN_STALE, MIN_WINDOW, markerNamesEngagement, markerProblem, normalizeLine, requiredBond, urlProblem } from "./limits.ts";
 
 const CLIENT = "0x1111111111111111111111111111111111111111";
 const PROVIDER = "0x2222222222222222222222222222222222222222";
@@ -37,6 +37,7 @@ function engagement(over: Partial<Engagement>): Engagement {
     resolution_note: "",
     challenge_deadline: "0",
     stale_at: "0",
+    terms_hash: "ab".repeat(32),
     ...over,
   };
 }
@@ -44,9 +45,9 @@ function engagement(over: Partial<Engagement>): Engagement {
 describe("limits match the contract", () => {
   const source = readFileSync(new URL("../../contracts/waypoint.py", import.meta.url), "utf8");
   const constant = (name: string) => {
-    const m = source.match(new RegExp(`^${name}\\s*=\\s*([0-9 *]+)`, "m"));
+    const m = source.match(new RegExp(`^${name}\\s*=\\s*([0-9_ *]+)`, "m"));
     assert.ok(m, `${name} not found in the contract`);
-    return m[1].split("*").reduce((a, b) => a * Number(b.trim()), 1);
+    return m[1].replace(/_/g, "").split("*").reduce((a, b) => a * Number(b.trim()), 1);
   };
   it("every constant the form validates against is the contract's", () => {
     assert.equal(MIN_WINDOW, constant("MIN_WINDOW"));
@@ -56,6 +57,7 @@ describe("limits match the contract", () => {
     assert.equal(BOND_BPS, constant("BOND_BPS"));
     assert.equal(MIN_MARKER, constant("MIN_MARKER"));
     assert.equal(MAX_MARKER, constant("MAX_MARKER"));
+    assert.equal(MAX_PAGE_BYTES, constant("MAX_BODY"));
   });
   it("the challenge window is longer than the ~30 minute finality measured on Bradbury", () => {
     assert.ok(MIN_WINDOW >= 2 * 30 * 60);
@@ -72,6 +74,13 @@ describe("validation mirrors the contract", () => {
     assert.ok(markerProblem("123456789012"));
     assert.ok(markerProblem("x1".repeat(101)));
     assert.equal(markerProblem("Release 4.2 shipped"), null);
+  });
+  it("the marker line must name the engagement, the way the contract compares it", () => {
+    assert.ok(markerNamesEngagement("Release 4.2 shipped for wp-0043", "wp-0043"));
+    assert.ok(markerNamesEngagement("release 4.2 shipped for WP-0043", "Wp-0043"));
+    assert.ok(markerNamesEngagement("release 4.2 shipped for wp   q3", "WP  Q3"));
+    assert.ok(!markerNamesEngagement("Release 4.2 shipped", "wp-0043"));
+    assert.ok(!markerNamesEngagement("Release 4.2 shipped for wp-0044", "wp-0043"));
   });
   it("refuses the urls the contract refuses", () => {
     for (const u of ["http://a.com/x", "https://127.0.0.1/x", "https://localhost/x", "https://a.com:8080/x", "https://u:p@a.com/x", "https://printer.local/x", "https://nodots/x"]) {
@@ -96,8 +105,12 @@ describe("decodeEngagement", () => {
     assert.equal(e.stale_at, "1799999000");
     assert.equal(e.evidence_digest, "ab12");
   });
+  it("decodes the terms hash the provider's accept() must pass", () => {
+    assert.equal(decodeEngagement(new Map<string, unknown>([["terms_hash", "cd".repeat(32)]])).terms_hash, "cd".repeat(32));
+  });
   it("falls back to safe defaults", () => {
     const e = decodeEngagement(new Map());
+    assert.equal(e.terms_hash, "");
     assert.equal(e.challenge_window, "0");
     assert.equal(e.reject_marker, "");
   });
@@ -202,7 +215,23 @@ describe("write confirmation", () => {
     assert.ok(!expectedStatus("settle")(engagement({ status: "upheld" })));
     assert.ok(expectedStatus("reclaim_stale")(engagement({ status: "split" })));
   });
-  it("only fund-moving actions wait for finality", () => {
+  it("after finality the engagement must be at least as far along as the write made it", () => {
+    // the write stuck, or someone else moved it further on: fine
+    assert.ok(finalStatus("verify")(engagement({ status: "verified" })));
+    assert.ok(finalStatus("verify")(engagement({ status: "released" })));
+    assert.ok(finalStatus("challenge")(engagement({ status: "overturned" })));
+    assert.ok(finalStatus("resolve_dispute")(engagement({ status: "refunded" })));
+    // an earlier state means the write did not stick
+    assert.ok(!finalStatus("verify")(engagement({ status: "submitted" })));
+    assert.ok(!finalStatus("accept")(engagement({ status: "proposed" })));
+    assert.ok(!finalStatus("challenge")(engagement({ status: "verified" })));
+    assert.ok(!finalStatus("resolve_dispute")(engagement({ status: "disputed" })));
+    for (const a of ["settle", "release", "reclaim_timeout", "reclaim_stale"] as const) {
+      assert.ok(!finalStatus(a)(engagement({ status: "upheld" })), a);
+      assert.ok(finalStatus(a)(engagement({ status: "refunded" })), a);
+    }
+  });
+  it("only fund-moving actions say funds move on finalization", () => {
     assert.ok(movesFunds("release") && movesFunds("settle") && movesFunds("reclaim_stale") && movesFunds("reclaim_timeout"));
     // resolve_dispute runs the model and only records a verdict: no transfer may share its transaction
     assert.ok(!movesFunds("resolve_dispute") && !movesFunds("verify") && !movesFunds("accept") && !movesFunds("create"));

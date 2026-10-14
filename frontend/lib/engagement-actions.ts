@@ -115,6 +115,21 @@ export function expectedStatus(action: EngagementAction | "create", before?: Eng
   }
 }
 
+const RANK: Record<string, number> = {
+  proposed: 0, funded: 1, submitted: 2, verified: 3, disputed: 4, upheld: 5, overturned: 5, released: 6, refunded: 6, split: 6,
+};
+const MIN_RANK: Record<string, number> = {
+  create: 0, accept: 1, submit: 2, verify: 3, challenge: 4, resolve_dispute: 5, settle: 6, release: 6, reclaim_timeout: 6, reclaim_stale: 6,
+};
+
+/**
+ * What a FINALIZED write must still show when the engagement is read again: at least as far along as the write
+ * made it. Someone else's later step is fine; an earlier state means the write did not stick.
+ */
+export function finalStatus(action: EngagementAction | "create"): (e: Engagement) => boolean {
+  return (e) => (RANK[e.status] ?? -1) >= (MIN_RANK[action] ?? 99);
+}
+
 /**
  * True for actions that move funds: the transfer only lands when the transaction finalizes.
  * resolve_dispute is deliberately not one of them: it runs the model and only records a verdict.

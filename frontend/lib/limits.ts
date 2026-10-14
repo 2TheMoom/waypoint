@@ -6,6 +6,8 @@ export const MAX_STALE = 30 * 86400;
 export const BOND_BPS = 1000;
 export const MIN_MARKER = 12;
 export const MAX_MARKER = 200;
+/** A page bigger than this is refused by the contract, never read in part. */
+export const MAX_PAGE_BYTES = 2_000_000;
 
 /** The text the contract compares: curly quotes straightened, whitespace collapsed, lower-cased. */
 export function normalizeLine(s: string): string {
@@ -24,6 +26,11 @@ export function markerProblem(marker: string, what = "Marker"): string | null {
   if (m.length < MIN_MARKER || m.length > MAX_MARKER) return `${what} must be ${MIN_MARKER} to ${MAX_MARKER} characters.`;
   if (!/[0-9]/.test(m) || !/\p{L}/u.test(m)) return `${what} needs a letter and a digit (make it specific: a date, version or id).`;
   return null;
+}
+
+/** The contract refuses a marker that does not contain the engagement id, so the line is about this engagement. */
+export function markerNamesEngagement(marker: string, id: string): boolean {
+  return normalizeLine(marker).includes(normalizeLine(id));
 }
 
 /** Mirrors the contract's URL rules closely enough to explain a refusal before it costs a transaction. */

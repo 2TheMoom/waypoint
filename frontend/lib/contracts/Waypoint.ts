@@ -9,16 +9,18 @@ import {
   type FeePresetLevel,
 } from "../genlayer/fees";
 import { failedReceiptMessage } from "../receipt";
-import { expectedStatus, movesFunds, type EngagementAction } from "../engagement-actions";
+import { expectedStatus, finalStatus, movesFunds, type EngagementAction } from "../engagement-actions";
 
 /** Where a write is in its life. The UI shows these; only "confirmed" means the engagement really changed. */
-export type WriteStage = "signing" | "submitted" | "accepted" | "confirmed" | "finalized";
+export type WriteStage = "signing" | "submitted" | "accepted" | "confirmed" | "finalized" | "failed";
 
 export interface WriteProgress {
   txHash?: string;
   stage: WriteStage;
   /** true when funds only move once the transaction finalizes */
   movesFunds: boolean;
+  /** why a write failed, set with stage "failed" */
+  message?: string;
 }
 
 export interface WriteOptions {
@@ -38,11 +40,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * the injected wallet provider and is connected to the chain before signing,
  * as the GenLayerJS docs prescribe for browser wallets.
  *
- * A write is only reported as done after three checks: the transaction was
+ * A write is only reported as done after four checks: the transaction was
  * accepted, its GenVM execution returned (an ACCEPTED transaction can still
- * have reverted), and reading the engagement back shows the expected state.
- * Fund-moving writes then keep watching until FINALIZED, because the
- * transfer is only delivered on finalization.
+ * have reverted), reading the engagement back shows the expected state, and
+ * then, for EVERY write, the transaction reached FINALIZED with a successful
+ * GenVM result and the engagement still shows that state. Until then a write
+ * is only "recorded": it can still change, and fund-moving writes only
+ * deliver their transfer on finalization.
  */
 class Waypoint {
   private contractAddress: `0x${string}`;
@@ -138,7 +142,7 @@ class Waypoint {
 
   private async submitWrite(functionName: string, args: unknown[], opts: WriteOptions): Promise<string> {
     const pays = movesFunds(opts.action as any);
-    const progress = (stage: WriteStage, txHash?: string) => opts.onProgress?.({ stage, txHash, movesFunds: pays });
+    const progress = (stage: WriteStage, txHash?: string, message?: string) => opts.onProgress?.({ stage, txHash, movesFunds: pays, message });
     const client = await this.writer();
     const fees = feePresetToTransactionFees(opts.feePreset);
 
@@ -174,21 +178,41 @@ class Waypoint {
     await this.confirmState(opts.engagementId, expectedStatus(opts.action));
     progress("confirmed", txHash);
 
-    if (pays) {
-      // The transfer lands when this transaction finalizes; report that moment separately.
-      void (async () => {
-        for (let i = 0; i < 8; i++) {
-          try {
-            await this.readClient.waitForTransactionReceipt({ hash: txHash, status: "FINALIZED" as any, retries: 400, interval: 10000 });
-            progress("finalized", txHash);
-            return;
-          } catch {
-            await sleep(15000);
-          }
-        }
-      })();
-    }
+    // Recorded is not done. Every write is watched until it is FINALIZED, then its GenVM result and the state are checked again.
+    void this.awaitFinality(txHash, functionName, opts, progress);
     return txHash;
+  }
+
+  private async awaitFinality(
+    txHash: string,
+    functionName: string,
+    opts: WriteOptions,
+    progress: (stage: WriteStage, txHash?: string, message?: string) => void
+  ): Promise<void> {
+    let receipt: any = null;
+    for (let i = 0; i < 8 && !receipt; i++) {
+      try {
+        receipt = await this.readClient.waitForTransactionReceipt({ hash: txHash, status: "FINALIZED" as any, retries: 400, interval: 10000 });
+      } catch {
+        await sleep(15000);
+      }
+    }
+    if (!receipt) {
+      progress("failed", txHash, `Transaction ${txHash} has not finalized yet. It is recorded but not final: check the explorer before relying on it.`);
+      return;
+    }
+    const failure = failedReceiptMessage(receipt, functionName, txHash);
+    if (failure) {
+      progress("failed", txHash, failure);
+      return;
+    }
+    try {
+      await this.confirmState(opts.engagementId, finalStatus(opts.action), 6);
+    } catch {
+      progress("failed", txHash, `Transaction ${txHash} finalized but the engagement does not show its result. Check the explorer.`);
+      return;
+    }
+    progress("finalized", txHash);
   }
 
   async estimateCreateEngagementFees(a: CreateArgs, level: FeePresetLevel = "standard") {
@@ -199,8 +223,11 @@ class Waypoint {
     return this.submitWrite("create_engagement", createArgs(a), { ...opts, action: "create", engagementId: a.id, value: a.amountWei });
   }
 
+  /** The provider accepts an exact digest of the terms (source, markers, description, amount, deadline), read fresh from the contract. */
   async accept(id: string, opts: Omit<WriteOptions, "action" | "engagementId"> = {}) {
-    return this.submitWrite("accept", [id], { ...opts, action: "accept", engagementId: id });
+    const e = await this.getEngagement(id);
+    if (!e || !e.terms_hash) throw new Error("Could not read the terms of this engagement. Try again.");
+    return this.submitWrite("accept", [id, e.terms_hash], { ...opts, action: "accept", engagementId: id });
   }
 
   async submit(id: string, opts: Omit<WriteOptions, "action" | "engagementId"> = {}) {

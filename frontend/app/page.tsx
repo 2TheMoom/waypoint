@@ -31,7 +31,7 @@ import { Label } from "@/components/ui/label";
 import type { Engagement } from "@/lib/contracts/types";
 import { getTxExplorerUrl } from "@/lib/genlayer/chains";
 import { availableActions, challengeOpen as isChallengeOpen, staleKind, staleOutcome } from "@/lib/engagement-actions";
-import { formatGen, MIN_WINDOW, MIN_STALE, markerProblem, requiredBond, urlProblem } from "@/lib/limits";
+import { formatGen, MIN_WINDOW, MIN_STALE, markerNamesEngagement, markerProblem, requiredBond, urlProblem } from "@/lib/limits";
 import type { WriteProgress } from "@/lib/hooks/useWaypoint";
 
 const WINDOW_CHOICES = [
@@ -203,6 +203,7 @@ function CreateEngagementDialog({ onCreated }: { onCreated: (id: string) => void
   const problems = [
     form.url ? urlProblem(form.url) : null,
     form.marker ? markerProblem(form.marker, "Marker") : null,
+    form.marker && form.id && !markerNamesEngagement(form.marker, form.id) ? "The marker line must contain the Engagement ID, so the line is about this engagement." : null,
     form.reject ? markerProblem(form.reject, "Reject marker") : null,
     form.marker && form.reject && form.marker.trim().toLowerCase() === form.reject.trim().toLowerCase() ? "The reject marker must differ from the marker." : null,
   ].filter(Boolean) as string[];
@@ -248,11 +249,11 @@ function CreateEngagementDialog({ onCreated }: { onCreated: (id: string) => void
           <Field label="Verification URL" hint="A public https page both sides can see. Validators fetch it themselves.">
             <Input id="wp-url" value={form.url} onChange={set("url")} placeholder="https://…" className="mt-1 font-mono" />
           </Field>
-          <Field label="Verification Marker (a whole line)" hint="Must be an entire line of the page, not a phrase inside one. Negated, quoted or partial text never counts. Include something specific such as a date or version.">
-            <Input id="wp-marker" value={form.marker} onChange={set("marker")} placeholder="Q3 pricing release shipped to production 2026" className="mt-1 font-mono" />
+          <Field label="Verification Marker (a whole line)" hint="Must be an entire line of the page, not a phrase inside one, and it must contain the Engagement ID so the line is about this engagement. Negated, quoted or partial text never counts.">
+            <Input id="wp-marker" value={form.marker} onChange={set("marker")} placeholder="wp-0043: Q3 pricing release shipped to production 2026" className="mt-1 font-mono" />
           </Field>
           <Field label="Reject Marker (optional, a whole line)" hint="If this line appears too, the evidence is contradictory and verification is refused.">
-            <Input id="wp-reject" value={form.reject} onChange={set("reject")} placeholder="Q3 pricing release was rolled back from production 2026" className="mt-1 font-mono" />
+            <Input id="wp-reject" value={form.reject} onChange={set("reject")} placeholder="wp-0043: Q3 pricing release was rolled back from production 2026" className="mt-1 font-mono" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Deadline">
@@ -292,14 +293,14 @@ const STAGES: { key: WriteProgress["stage"]; label: string }[] = [
   { key: "signing", label: "Sign in wallet" },
   { key: "submitted", label: "Sent" },
   { key: "accepted", label: "Accepted by validators" },
-  { key: "confirmed", label: "State confirmed" },
+  { key: "confirmed", label: "State read back (not final)" },
 ];
 
 /** Shows how far a write has got. "Accepted" is not "done": done is the contract state read back, and money moves on finalization. */
 function TxProgress({ progress, pending }: { progress: WriteProgress | null; pending: boolean }) {
   if (!progress) return null;
   const order = ["signing", "submitted", "accepted", "confirmed", "finalized"];
-  const at = order.indexOf(progress.stage);
+  const at = progress.stage === "failed" ? order.indexOf("confirmed") : order.indexOf(progress.stage);
   return (
     <div className="mt-4 font-mono text-[0.7rem]" style={{ color: "var(--ink-faint)" }}>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -313,9 +314,13 @@ function TxProgress({ progress, pending }: { progress: WriteProgress | null; pen
             </span>
           );
         })}
-        {progress.movesFunds && (
-          <span style={{ color: progress.stage === "finalized" ? "var(--moss)" : "var(--brass-bright)" }}>
-            {progress.stage === "finalized" ? "✓ Finalized, funds delivered" : "… Waiting for finality (funds move then, about 30 min)"}
+        {at >= order.indexOf("confirmed") && (
+          <span style={{ color: progress.stage === "finalized" ? "var(--moss)" : progress.stage === "failed" ? "var(--rust)" : "var(--brass-bright)" }}>
+            {progress.stage === "finalized"
+              ? progress.movesFunds ? "✓ Finalized, funds delivered" : "✓ Finalized, result confirmed"
+              : progress.stage === "failed"
+                ? `✗ ${progress.message ?? "Did not finalize as expected"}`
+                : `… Recorded, not final: waiting for finality (about 30 min${progress.movesFunds ? ", funds move then" : ""})`}
           </span>
         )}
       </div>
@@ -491,9 +496,15 @@ function EngagementHero({ id }: { id: string }) {
 
       <div className="flex gap-3 flex-wrap mt-6 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
         {actions.includes("accept") && (
-          <button className="btn-field solid" disabled={acceptAction.isPending} onClick={() => acceptAction.run({ id })}>
-            {acceptAction.isPending ? "Accepting…" : "Accept Terms"}
-          </button>
+          <div className="flex flex-col gap-1.5">
+            <button className="btn-field solid" disabled={acceptAction.isPending} onClick={() => acceptAction.run({ id })}>
+              {acceptAction.isPending ? "Accepting…" : "Accept Terms"}
+            </button>
+            <span className="field-note break-all">
+              Accepting records this digest of the exact terms above (source, markers, deliverable, amount, deadline):{" "}
+              <span style={{ color: "var(--brass-bright)" }}>{e.terms_hash.slice(0, 16)}…</span>
+            </span>
+          </div>
         )}
         {actions.includes("submit") && (
           <button className="btn-field solid" disabled={submitAction.isPending} onClick={() => submitAction.run({ id })}>

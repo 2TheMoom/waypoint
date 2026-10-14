@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import Waypoint, { type CreateArgs, type WriteProgress } from "../contracts/Waypoint";
 import { getContractAddress, getStudioUrl } from "../genlayer/client";
 import { useWallet } from "../genlayer/wallet";
-import { success, error, configError } from "../utils/toast";
+import { success, error, info, configError } from "../utils/toast";
 import type { Engagement } from "../contracts/types";
 
 export type { WriteProgress };
@@ -108,14 +108,25 @@ function useWriteAction<TArgs>(
         setProgress({ ...p, at: Date.now() });
         if (p.stage === "finalized") {
           refresh(id);
-          if (messages.finalized) success(messages.finalized.title, { description: messages.finalized.description });
+          const done = messages.finalized ?? {
+            title: `${messages.confirmed.title}, final`,
+            description: "The transaction finalized with a successful result and the engagement shows it.",
+          };
+          success(done.title, { description: done.description });
+        } else if (p.stage === "failed") {
+          refresh(id);
+          error(`${messages.confirmed.title}: not final`, { description: p.message || "The transaction did not finalize as expected." });
         }
       });
     },
     onSuccess: (_data, args) => {
       refresh(getEngagementId(args));
       setIsPending(false);
-      success(messages.confirmed.title, { description: messages.confirmed.description });
+      // Recorded, not done: the success message comes when the transaction finalizes.
+      info(`${messages.confirmed.title}: recorded, waiting for finality`, {
+        description: `${messages.confirmed.description} It counts as done once it finalizes (about 30 minutes on Bradbury).`,
+        duration: 8000,
+      });
     },
     onError: (err: any) => {
       console.error(errorTitle, err);

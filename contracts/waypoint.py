@@ -16,6 +16,7 @@ BOND_BPS = 1000
 MIN_MARKER = 12
 MAX_MARKER = 200
 MAX_PAGE_CHARS = 12000
+MAX_BODY = 2_000_000  # a bigger page is refused, never cut
 MAX_EXCERPT = 600
 PAGE = 50
 RAW_TAGS = ("script", "style", "noscript", "svg", "template")
@@ -79,7 +80,7 @@ def _tag(low: str, i: int, n: int) -> str:
 
 
 def _lines(body: bytes) -> list:
-    s = body[:2_000_000].decode("utf-8", errors="replace")
+    s = body.decode("utf-8", errors="replace")
     low = s.lower()
     n = len(s)
     out: list = []
@@ -215,6 +216,7 @@ class Waypoint(gl.Contract):
         _bad(not isinstance(deliverable_description, str) or not 0 < len(deliverable_description) <= 2000, "description must be 1 to 2000 characters")
         url = _url(verification_url)
         marker = _marker(verification_marker, "verification_marker")
+        _bad(_norm(engagement_id) not in marker, "verification_marker must contain the engagement id")
         reject = "" if reject_marker == "" else _marker(reject_marker, "reject_marker")
         _bad(reject == marker, "reject_marker must differ from verification_marker")
         for n in (deadline, challenge_window, stale_after):
@@ -232,10 +234,15 @@ class Waypoint(gl.Contract):
         self.engagement_ids.append(engagement_id)
         self.total_received += gl.message.value
 
+    def _terms(self, e: Engagement) -> str:
+        t = [e.verification_url, e.verification_marker, e.reject_marker, e.deliverable_description, int(e.amount), int(e.deadline)]
+        return hashlib.sha256(json.dumps(t).encode("utf-8")).hexdigest()
+
     @gl.public.write
-    def accept(self, engagement_id: str) -> None:
+    def accept(self, engagement_id: str, terms_hash: str) -> None:
         e = self._get(engagement_id)
         _bad(gl.message.sender_address != e.provider, "Only the provider can accept")
+        _bad(terms_hash != self._terms(e), "terms_hash does not match the terms")
         _bad(e.status != "proposed", f"Not awaiting acceptance (status: {e.status})")
         _bad(self._now() >= e.deadline, "Deadline has passed, the client can cancel")
         e.status = "funded"
@@ -257,6 +264,8 @@ class Waypoint(gl.Contract):
                 return {"kind": "unreachable", "excerpt": ""}
             if r.status != 200 or not r.body:  # an error page says nothing about the deliverable
                 return {"kind": "unreachable", "excerpt": ""}
+            if len(r.body) > MAX_BODY:
+                return {"kind": "too_large", "excerpt": ""}
             return _evidence(_lines(r.body), marker, reject)
 
         def validator_fn(res) -> bool:
@@ -272,11 +281,12 @@ class Waypoint(gl.Contract):
 
     @gl.public.write
     def verify(self, engagement_id: str) -> None:
-        """Validators must agree the marker is a whole line and on the lines around it; the excerpt and its hash are stored."""
+        """Validators agree the marker is a whole line and on its neighbours; the excerpt and hash are stored."""
         e = self._get(engagement_id)
         _bad(e.status != "submitted", f"Not awaiting verification (status: {e.status})")
         r = self._read(e.verification_url, e.verification_marker, e.reject_marker)
-        _bad(r["kind"] == "unreachable", "Evidence page unreadable, nothing recorded. Try again shortly.")
+        _bad(r["kind"] == "unreachable", "Evidence page unreadable, nothing recorded")
+        _bad(r["kind"] == "too_large", "Evidence page too large, nothing recorded")
         _bad(r["kind"] == "rejected", "The page has the reject line, so its evidence is contradictory")
         _bad(r["kind"] != "ok", "The marker is not a whole line of the page")
         e.status = "verified"
@@ -311,9 +321,9 @@ class Waypoint(gl.Contract):
                 return none
             if r.status != 200 or not r.body:
                 return none
-            lines = _lines(r.body)
+            lines = _lines(r.body) if len(r.body) <= MAX_BODY else []
             page = "\n".join(lines)
-            if len(page) > MAX_PAGE_CHARS:  # never judge money on part of the evidence
+            if len(page) > MAX_PAGE_CHARS or len(r.body) > MAX_BODY:  # never judge money on part of the evidence
                 return {"verdict": "inconclusive", "reasoning": "page too large to read in full"}
             now = _evidence(lines, marker, reject)
             same = now["kind"] == "ok" and now["excerpt"] == committed
@@ -343,17 +353,17 @@ class Waypoint(gl.Contract):
 
     @gl.public.write
     def resolve_dispute(self, engagement_id: str) -> None:
-        """Records the verdict only (upheld or overturned); settle() pays it. Unclear: nothing changes."""
+        """Records the verdict only; settle() pays it. Unclear: nothing changes."""
         e = self._get(engagement_id)
         _bad(e.status != "disputed", f"Not under dispute (status: {e.status})")
         r = self._judge(e)
-        _bad(r["verdict"] not in ("uphold", "overturn"), "No clear verdict (unreadable, too large or unclear). Retry or wait for stale recovery.")
+        _bad(r["verdict"] not in ("uphold", "overturn"), "No clear verdict (unreadable, too large or unclear)")
         e.resolution_note = r["reasoning"]
         e.status = "upheld" if r["verdict"] == "uphold" else "overturned"
 
     @gl.public.write
     def settle(self, engagement_id: str) -> None:
-        """Pays a recorded verdict. Kept out of resolve_dispute so no transfer shares a transaction with the model call."""
+        """Pays a recorded verdict, apart from the model call."""
         e = self._get(engagement_id)
         _bad(e.status not in ("upheld", "overturned"), f"No verdict to settle (status: {e.status})")
         total = int(e.amount) + int(e.bond)
@@ -379,7 +389,7 @@ class Waypoint(gl.Contract):
 
     @gl.public.write
     def reclaim_stale(self, engagement_id: str) -> None:
-        """Stuck submission: refund the client. Stuck dispute: split the escrow evenly, the bond goes to the provider."""
+        """Stuck submission: refund. Stuck dispute: even split, bond to the provider."""
         e = self._get(engagement_id)
         now = self._now()
         sub = e.status == "submitted" and now >= int(e.deadline) + int(e.stale_after)
@@ -403,7 +413,7 @@ class Waypoint(gl.Contract):
             "deadline": e.deadline, "challenge_window": e.challenge_window, "stale_after": e.stale_after, "status": e.status,
             "submitted_at": e.submitted_at, "verified_at": e.verified_at, "disputed_at": e.disputed_at,
             "evidence_excerpt": e.evidence_excerpt, "evidence_digest": e.evidence_digest, "dispute_reason": e.dispute_reason,
-            "resolution_note": e.resolution_note,
+            "resolution_note": e.resolution_note, "terms_hash": self._terms(e),
             "challenge_deadline": int(e.verified_at) + int(e.challenge_window) if e.verified_at > 0 else 0, "stale_at": stale,
         }
 

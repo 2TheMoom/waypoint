@@ -14,10 +14,14 @@ AFTER_WINDOW = "2026-01-01T01:00:01Z"
 AFTER_STALE = "2026-01-01T02:00:01Z"
 
 URL = "https://deliverable.example.com/status"
-MARKER = "Milestone Q3-2026 shipped to production"
+MARKER = "Milestone Q3-2026 shipped to production wp-1"  # the marker line must name the engagement
 REJECT = "Milestone Q3-2026 was rolled back"
 DESC = "Deploy the marketing site with the Q3 pricing table live"
 REASON = "The pricing table is still the old one"
+
+
+def _marker(eid="wp-1"):
+    return MARKER if eid == "wp-1" else MARKER.replace("wp-1", eid)
 
 
 def _page(*lines):
@@ -52,7 +56,7 @@ def _capture_sends(vm):
 
 
 def _create(vm, c, client, provider, eid="wp-1", value=1000, deadline=DEADLINE, **kw):
-    args = dict(description=DESC, url=URL, marker=MARKER, reject=REJECT, window=WINDOW, stale=STALE)
+    args = dict(description=DESC, url=URL, marker=_marker(eid), reject=REJECT, window=WINDOW, stale=STALE)
     args.update(kw)
     vm.sender = client
     vm.value = value
@@ -60,10 +64,14 @@ def _create(vm, c, client, provider, eid="wp-1", value=1000, deadline=DEADLINE, 
     vm.value = 0
 
 
+def _accept(c, eid="wp-1"):
+    c.accept(eid, c.get_engagement(eid)["terms_hash"])
+
+
 def _to_funded(vm, c, alice, bob, eid="wp-1", value=1000, **kw):
     _create(vm, c, alice, bob, eid, value, **kw)
     vm.sender = bob
-    c.accept(eid)
+    _accept(c, eid)
 
 
 def _to_submitted(vm, c, alice, bob, eid="wp-1", value=1000, **kw):
@@ -74,7 +82,7 @@ def _to_submitted(vm, c, alice, bob, eid="wp-1", value=1000, **kw):
 
 def _to_verified(vm, c, alice, bob, eid="wp-1", value=1000, **kw):
     _to_submitted(vm, c, alice, bob, eid, value, **kw)
-    _web(vm, _page("intro", MARKER, "outro"))
+    _web(vm, _page("intro", _marker(eid), "outro"))
     c.verify(eid)
 
 
@@ -236,12 +244,12 @@ def test_accept_only_by_provider_once(direct_vm, direct_deploy, direct_alice, di
     for who in (direct_alice, direct_charlie):
         direct_vm.sender = who
         with direct_vm.expect_revert("Only the provider"):
-            c.accept("wp-1")
+            _accept(c)
     direct_vm.sender = direct_bob
-    c.accept("wp-1")
+    _accept(c)
     assert c.get_engagement("wp-1")["status"] == "funded"
     with direct_vm.expect_revert("Not awaiting acceptance"):
-        c.accept("wp-1")
+        _accept(c)
 
 
 def test_accept_after_deadline_fails(direct_vm, direct_deploy, direct_alice, direct_bob):
@@ -251,7 +259,7 @@ def test_accept_after_deadline_fails(direct_vm, direct_deploy, direct_alice, dir
     direct_vm.warp("2026-01-02T00:00:01Z")
     direct_vm.sender = direct_bob
     with direct_vm.expect_revert("Deadline has passed"):
-        c.accept("wp-1")
+        _accept(c)
 
 
 def test_submit_requires_acceptance_and_provider(direct_vm, direct_deploy, direct_alice, direct_bob):
@@ -261,7 +269,7 @@ def test_submit_requires_acceptance_and_provider(direct_vm, direct_deploy, direc
     direct_vm.sender = direct_bob
     with direct_vm.expect_revert("Not awaiting submission"):
         c.submit("wp-1")
-    c.accept("wp-1")
+    _accept(c)
     direct_vm.sender = direct_alice
     with direct_vm.expect_revert("Only the provider"):
         c.submit("wp-1")
@@ -287,7 +295,7 @@ def test_unknown_engagement_reverts(direct_vm, direct_deploy, direct_alice):
     c = direct_deploy(CONTRACT)
     direct_vm.sender = direct_alice
     with direct_vm.expect_revert("not found"):
-        c.accept("nope")
+        c.accept("nope", "x")
     with direct_vm.expect_revert("not found"):
         c.get_engagement("nope")
 
@@ -375,7 +383,7 @@ def test_verify_accepts_inline_tags_entities_and_case(direct_vm, direct_deploy, 
     c = direct_deploy(CONTRACT)
     direct_vm.warp(T0)
     _to_submitted(direct_vm, c, direct_alice, direct_bob)
-    _web(direct_vm, "<div>x</div><p>MILESTONE   Q3-2026 <b>shipped</b>&nbsp;to <i>production</i></p>")
+    _web(direct_vm, "<div>x</div><p>MILESTONE   Q3-2026 <b>shipped</b>&nbsp;to <i>production</i> WP-1</p>")
     c.verify("wp-1")
     assert c.get_engagement("wp-1")["status"] == "verified"
 
@@ -384,7 +392,7 @@ def test_verify_inline_tags_separate_words(direct_vm, direct_deploy, direct_alic
     c = direct_deploy(CONTRACT)
     direct_vm.warp(T0)
     _to_submitted(direct_vm, c, direct_alice, direct_bob)
-    _web(direct_vm, "<p>Milestone Q3-2026 shipped<i>to</i>production</p>")
+    _web(direct_vm, "<p>Milestone Q3-2026 shipped<i>to</i>production wp-1</p>")
     c.verify("wp-1")
     assert c.get_engagement("wp-1")["status"] == "verified"
 
@@ -658,7 +666,7 @@ def test_dispute_prompt_carries_committed_evidence_and_change_facts(direct_vm, d
     _to_disputed(direct_vm, c, direct_alice, direct_bob)
     # page unchanged: the prompt must say so and quote the committed excerpt
     _web(direct_vm, _page("intro", MARKER, "outro"))
-    direct_vm.mock_llm(r"(?s).*intro \| milestone q3-2026 shipped to production \| outro.*committed evidence is unchanged.*",
+    direct_vm.mock_llm(r"(?s).*intro \| milestone q3-2026 shipped to production wp-1 \| outro.*committed evidence is unchanged.*",
                        json.dumps({"verdict": "uphold", "reasoning": "unchanged"}))
     c.resolve_dispute("wp-1")
     assert c.get_engagement("wp-1")["resolution_note"] == "unchanged"
@@ -853,7 +861,7 @@ def test_settled_engagement_cannot_be_paid_again_by_any_path(direct_vm, direct_d
         lambda: c.reclaim_timeout("wp-1"),
         lambda: c.reclaim_stale("wp-1"),
         lambda: c.verify("wp-1"),
-        lambda: c.accept("wp-1"),
+        lambda: _accept(c),
         lambda: c.submit("wp-1"),
     ):
         with direct_vm.expect_revert():
@@ -908,3 +916,122 @@ def test_removed_entry_points_stay_removed(direct_vm, direct_deploy):
     c = direct_deploy(CONTRACT)
     for name in ("retry_payout", "cancel", "get_payout"):
         assert not hasattr(c, name)
+
+
+# ---------------------------------------------------------------------------
+# steward round 3: relevance (marker names the engagement), exact-terms acceptance, no silent truncation
+# ---------------------------------------------------------------------------
+
+
+def test_the_marker_must_name_the_engagement(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    with direct_vm.expect_revert("must contain the engagement id"):
+        _create(direct_vm, c, direct_alice, direct_bob, marker="Milestone Q3-2026 shipped to production")
+    with direct_vm.expect_revert("must contain the engagement id"):
+        _create(direct_vm, c, direct_alice, direct_bob, marker="Milestone Q3-2026 shipped to production wp-2")
+    assert c.get_engagement_count() == 0
+    # the id is matched the way lines are: case and spacing do not matter
+    _create(direct_vm, c, direct_alice, direct_bob, eid="Wp  Q3", marker="milestone shipped for wp q3 today 2026")
+    assert c.get_engagement("Wp  Q3")["verification_marker"] == "milestone shipped for wp q3 today 2026"
+
+
+def test_a_line_about_another_engagement_cannot_verify_this_one(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _to_submitted(direct_vm, c, direct_alice, direct_bob)
+    _verify_fails(direct_vm, c, _page(_marker("wp-2"), "Milestone Q3-2026 shipped to production"), "not a whole line")
+
+
+def test_the_provider_must_accept_the_exact_terms(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _create(direct_vm, c, direct_alice, direct_bob)
+    _create(direct_vm, c, direct_alice, direct_bob, eid="wp-2", url="https://other.example.com/status")
+    good, other = c.get_engagement("wp-1")["terms_hash"], c.get_engagement("wp-2")["terms_hash"]
+    assert len(good) == 64 and good != other
+    direct_vm.sender = direct_bob
+    for bad in ("", "x", other, good.upper(), good + "0"):
+        with direct_vm.expect_revert("terms_hash does not match"):
+            c.accept("wp-1", bad)
+    assert c.get_engagement("wp-1")["status"] == "proposed"
+    c.accept("wp-1", good)
+    assert c.get_engagement("wp-1")["status"] == "funded"
+
+
+def test_the_terms_hash_covers_every_term(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    base = "milestone shipped for t0 t1 t2 t3 t4 t5 t6 today 2026"  # names every engagement below
+    variants = [
+        {},
+        dict(url="https://other.example.com/status"),
+        dict(marker=base + " extra"),
+        dict(reject=REJECT + " later"),
+        dict(description=DESC + "."),
+        dict(value=1001),
+        dict(deadline=DEADLINE + 1),
+    ]
+    hashes = set()
+    for i, kw in enumerate(variants):
+        eid = f"t{i}"
+        kw = dict({"marker": base}, **kw)
+        _create(direct_vm, c, direct_alice, direct_bob, eid=eid, **kw)
+        hashes.add(c.get_engagement(eid)["terms_hash"])
+    assert len(hashes) == len(variants)  # changing any single term changes the hash
+
+
+def _big(n, marker=None):
+    """A page of exactly n bytes whose padding is an HTML comment, so it reads as almost no text."""
+    head = "<p>" + (marker or MARKER) + "</p><!--"
+    tail = "-->"
+    return head + "x" * (n - len(head) - len(tail)) + tail
+
+
+def test_a_page_over_the_size_limit_is_refused_not_cut_short(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _to_submitted(direct_vm, c, direct_alice, direct_bob)
+    # the reject line sits beyond the old 2 MB cut: reading only the front would have verified this
+    body = _big(2_000_000 - 40) + "<p>" + REJECT + "</p>" + "<!--" + "y" * 1000 + "-->"
+    assert len(body.encode()) > 2_000_000
+    _web(direct_vm, body)
+    with direct_vm.expect_revert("too large"):
+        c.verify("wp-1")
+    assert c.get_engagement("wp-1")["status"] == "submitted"
+    assert c.get_engagement("wp-1")["evidence_digest"] == ""
+
+
+def test_a_page_of_exactly_the_limit_is_read_in_full(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    direct_vm.warp(T0)
+    _to_submitted(direct_vm, c, direct_alice, direct_bob)
+    body = _big(2_000_000)
+    assert len(body.encode()) == 2_000_000
+    _web(direct_vm, body)
+    c.verify("wp-1")
+    assert c.get_engagement("wp-1")["status"] == "verified"
+
+
+def test_a_dispute_over_an_oversized_page_judges_nothing(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    _capture_sends(direct_vm)
+    direct_vm.warp(T0)
+    _to_disputed(direct_vm, c, direct_alice, direct_bob)
+    _web(direct_vm, _big(2_000_001))  # little text, but more bytes than can be read in full
+    direct_vm.mock_llm(r".*Adjudicate a disputed escrow deliverable.*", json.dumps({"verdict": "uphold", "reasoning": "should never be asked"}))
+    with direct_vm.expect_revert("No clear verdict"):
+        c.resolve_dispute("wp-1")
+    e = c.get_engagement("wp-1")
+    assert e["status"] == "disputed" and e["resolution_note"] == ""
+
+
+def test_a_dispute_over_a_page_of_exactly_the_limit_is_judged(direct_vm, direct_deploy, direct_alice, direct_bob):
+    c = direct_deploy(CONTRACT)
+    _capture_sends(direct_vm)
+    direct_vm.warp(T0)
+    _to_disputed(direct_vm, c, direct_alice, direct_bob)
+    _web(direct_vm, _big(2_000_000))
+    direct_vm.mock_llm(r"(?s).*<current_page>\s*milestone q3-2026 shipped to production wp-1\s*</current_page>.*", json.dumps({"verdict": "uphold", "reasoning": "read in full"}))
+    c.resolve_dispute("wp-1")
+    assert c.get_engagement("wp-1")["resolution_note"] == "read in full"

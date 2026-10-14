@@ -37,6 +37,7 @@ export interface Engagement {
   resolution_note: string;
   challenge_deadline: string; // unix seconds, "0" until verified
   stale_at: string; // unix seconds a stuck submission or dispute becomes recoverable, "0" otherwise
+  terms_hash: string; // sha256 of source, markers, description, amount and deadline; the provider's accept() must pass it
 }
 
 export interface TransactionReceipt {
