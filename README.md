@@ -17,10 +17,14 @@ with `disputed` (then `upheld` or `overturned`, then settled), `refunded` and
 
 1. `create_engagement(...)` is payable. The client escrows GEN and fixes the
    deliverable text, a public https `verification_url`, a **whole-line
-   marker**, an optional **reject marker**, the deadline, the challenge
-   window and the recovery time.
-2. `accept(id)`: the provider agrees to those terms before work starts. Until
-   then the client can cancel and take the escrow back.
+   marker that contains the engagement id**, an optional **reject marker**, the
+   deadline, the challenge window and the recovery time.
+2. `accept(id, terms_hash)`: the provider agrees to those exact terms before
+   work starts, by passing the sha256 digest of them (`terms_hash` in
+   `get_engagement`: source URL, both markers, deliverable text, amount and
+   deadline). A wrong digest is refused, so an acceptance is on chain evidence
+   that the provider saw this source and this marker. Until then the client
+   can cancel and take the escrow back.
 3. `submit(id)`: the provider says the work is ready.
 4. `verify(id)`: permissionless. Validators fetch the page themselves and
    must agree on the result **and on the lines around the marker**. The
@@ -51,14 +55,37 @@ text. Verification now works on **whole lines**:
   contradictory and verification is refused.
 - Markers must be 12 to 200 characters with at least one letter and one digit,
   so a creator has to pick something specific (a date, a version, an id).
-- If the page cannot be read cleanly (non-200, empty, network error) nothing
-  is recorded and `verify` can simply be called again.
+- **The verification marker must contain the engagement id** (compared the way
+  lines are: case and spacing ignored). A generic line left on a page from an
+  earlier release, or a line about another engagement, can never verify this
+  one, because the only line that matches is one that names it.
+- **A page is read in full or not at all.** A response over 2,000,000 bytes is
+  refused: `verify` records nothing and a dispute reaches no verdict. It is
+  never cut at 2 MB and judged on the front of the page, which would let
+  content past the cut (a reject line, a retraction) go unseen.
+- If the page cannot be read cleanly (non-200, empty, too large, network
+  error) nothing is recorded and `verify` can simply be called again.
 
-This is still a check that a specific line is on a specific page. It cannot
-tell whether the line is *true*; the creator chooses the URL and the line, and
-the provider accepts them before any work starts. What it does guarantee is
-that the page said exactly that, validators agreed on the surrounding
-context, and the agreement is committed to the chain.
+### Who is the authority, honestly
+
+Nothing on chain can prove that a host is authoritative for a deliverable, and
+Waypoint does not pretend to. What it does establish is **agreement**:
+
+- the source and the line are fixed at creation and cannot change afterwards;
+- the provider's `accept` passes a digest of exactly those terms, so
+  acceptance is recorded evidence that both sides agreed this page and this
+  line are the proof of delivery;
+- the line has to name the engagement, so it is about this deliverable and
+  not any line that happens to match;
+- validators agree on the lines around it, the excerpt is committed, and a
+  reject line makes evidence contradictory.
+
+What remains is real: if the provider controls the page, the provider can
+write the line, and the client's protection is the challenge window and bond,
+where a model weighs the committed excerpt against the whole current page and
+the deliverable text. A client who wants stronger authority should pick a
+source neither side can edit alone (a release page, a CI status, a public
+registry) as the URL, and refuse a proposal that points anywhere else.
 
 ### Evidence commitments and disputes
 
@@ -71,8 +98,8 @@ At `resolve_dispute` the reviewers receive the objection, the deliverable
 text, the **committed excerpt**, and the **whole current page** (never the
 first few kilobytes of it): the contract tells them whether the marker line is
 still present and whether the committed evidence is unchanged. A page that
-cannot be read in full (non-200, or over 12,000 characters after reduction)
-yields no verdict rather than a partial judgment. The model may answer
+cannot be read in full (non-200, over 2,000,000 bytes, or over 12,000
+characters after reduction) yields no verdict rather than a partial judgment. The model may answer
 `uphold`, `overturn` or `inconclusive`; only the first two ever move money,
 and `inconclusive`, unparseable or unreadable answers leave the dispute exactly
 as it was so it can be retried.
@@ -139,13 +166,40 @@ briefly see the new balance before the stored totals catch up.
 
 ## Live deployment
 Deployed on **GenLayer Bradbury Testnet** (chain ID 4221):
-- **Contract (v5):** [`0xADABCcE75EdAC0b6d5799d1AB5a50981043a07db`](https://explorer-bradbury.genlayer.com/address/0xADABCcE75EdAC0b6d5799d1AB5a50981043a07db)
+- **Contract (v6):** [`0x997faAD18C5d30a9EDec492B58f0cfc6EeC69dbb`](https://explorer-bradbury.genlayer.com/address/0x997faAD18C5d30a9EDec492B58f0cfc6EeC69dbb)
 - **Frontend:** https://waypoint-frontend-one.vercel.app
 - Earlier deployments are superseded, with their live runs kept for reference:
+  v5 `0xADABCcE7...` (marker not tied to the engagement, acceptance without
+  terms, pages cut at 2 MB; `scripts/e2e-log-v5.json` and the section below),
   v4 `0xD55b2252...` (paid inside `resolve_dispute`; `scripts/e2e-log-v4.json`),
   v3 `0x15f975aD...` (also returned a stale dispute's bond to the client;
   `scripts/e2e-log-v3.json`), `0x1d30EDaf...` (substring markers) and before it
   `0x83AE6C0D...`.
+
+<!--ROUND3_START-->
+## Round 3 evidence (Bradbury, contract v6)
+
+`scripts/e2e-v6.mjs` ran against the deployed **v6** contract `0x997faAD18C5d30a9EDec492B58f0cfc6EeC69dbb` with a separate client wallet and provider wallet (and a third for permissionless calls). Run `mv8da5xp` did the oversized-page, page-grows, uphold and overturn scenarios (`scripts/e2e-log-v6-main.json`); run `mv8ewn6i` did the marker and terms-hash scenario again on its own (`scripts/e2e-log-v6-named.json`), for the reason explained below. The evidence pages are in `demo/evidence6/`. Release and stale recovery did not change since v5 and keep their v5 evidence (below) and direct tests.
+
+| Test | What was done | Transactions | Result |
+|---|---|---|---|
+| Marker must name the engagement | `create_engagement` whose marker has no engagement id (1 wei sent) | [`0x0b1da30552`](https://explorer-bradbury.genlayer.com/tx/0x0b1da3055238faf9df29cbbf325ba63b047a72ae02118ef256101dc14f94d529) | `FINISHED_WITH_ERROR`; the engagement count did not change |
+| Provider accepts the exact terms | `accept` with a wrong terms hash, then with the on-chain `terms_hash` | [`0x6014387102`](https://explorer-bradbury.genlayer.com/tx/0x60143871022b75a7653d50d03e3fc996c1aca0b8499dbef9c498abc97faf6192) then [`0xc4c070990c`](https://explorer-bradbury.genlayer.com/tx/0xc4c070990c917e305d2a318718d6e01aeb3667c783585a4f4c4e56be0ed55fe3) | wrong hash refused and the engagement stayed `proposed`; the right hash made it `funded` |
+| Own line verifies | page line `wp6-named: Q3 pricing release shipped to production 2026` | [`0x6002273cf0`](https://explorer-bradbury.genlayer.com/tx/0x6002273cf049fb5614a12f06cbedd618189fb72b1b20ab184d7ca0f45c0dd411) | `verified`; committed excerpt names the engagement |
+| A line about another engagement does not | page whose line is `wp6-someone-else: Q3 pricing release shipped ...`, engagement `wp6-named-x` | [`0x9694fd2e01`](https://explorer-bradbury.genlayer.com/tx/0x9694fd2e01fb21eb632cac680020a8f729f487f19fa374ece20e9a9c8925f1a3) | `FINISHED_WITH_ERROR`; still `submitted`, `evidence_digest` empty |
+| Oversized page is refused | evidence page of 2,236,134 bytes (limit 2,000,000) whose reject line is its last line, past the old 2 MB cut | [`0x59341e6803`](https://explorer-bradbury.genlayer.com/tx/0x59341e6803d56cc3cae6e2cf09b9369f9fdebf93c021011ebb9c355e088edfb0) | `FINISHED_WITH_ERROR`; still `submitted`, nothing recorded |
+| Page grows after verification | verified normally, then the page is replaced by one of 2,236,112 bytes, then the client challenges and `resolve_dispute` is tried twice | [`0x249e5eb2ba`](https://explorer-bradbury.genlayer.com/tx/0x249e5eb2ba501f958a0c17673cd1b9396d0bb63a4066062d18d083681f68d6a6) then [`0x39485b9eca`](https://explorer-bradbury.genlayer.com/tx/0x39485b9ecaa89c1c78ef69075ede4ac11ded64cb81e7f19c4447454df3202681) [`0xbe25c247c1`](https://explorer-bradbury.genlayer.com/tx/0xbe25c247c12fcef56c344100f069cc06a4f10385a4419afeefe46b8ad48e45dc) | both attempts `FINISHED_WITH_ERROR`; still `disputed`, no verdict, no resolution note |
+| Uphold (regression of the money path) | good page, client objects without cause | verify [`0xc410dd007e`](https://explorer-bradbury.genlayer.com/tx/0xc410dd007eef97311375bb8a5c08a9e3830df1fd4985ba35074617328878fb24), challenge [`0x436692ac86`](https://explorer-bradbury.genlayer.com/tx/0x436692ac864731f89727e7277ffacf90f4261efdf3907127d8d9f943c7a80cdb), resolve [`0x192ab836aa`](https://explorer-bradbury.genlayer.com/tx/0x192ab836aaba1893e912d6810a04e68c61eb395a1d1b23c72d1ac5eb36c3a5d4), settle [`0x575f347079`](https://explorer-bradbury.genlayer.com/tx/0x575f3470791cdc76ce426e20edf38cc88e1cbb9e35d58bda5f585cf8d591d38e) | verdict `upheld` recorded with no money moved, then `settle` paid escrow + bond: the provider's balance rose by exactly 0.002200 GEN (that wallet only receives) |
+| Overturn (regression of the money path) | page says the migration guide is missing, client objects | verify [`0xe7ee04af01`](https://explorer-bradbury.genlayer.com/tx/0xe7ee04af0153b095c92576d479245c23bfcda17b980aba8e16355d54859cbd9b), challenge [`0x3ffd1ac35a`](https://explorer-bradbury.genlayer.com/tx/0x3ffd1ac35ac49f57732c8417cf39db055bce97bbe0e97e1d49c5908132255664), resolve [`0x223e5bc0cb`](https://explorer-bradbury.genlayer.com/tx/0x223e5bc0cb8deda3f6c8d5bbe20daa7a6c37793c8fb4ae9419180cda1d713961), settle [`0x4fc3343ed7`](https://explorer-bradbury.genlayer.com/tx/0x4fc3343ed7e1b49d9954ed16009ee95d5232d3d04f730555fd2e28eef9c1c4e2) | verdict `overturned` recorded, then `settle` refunded escrow + bond to the client (checked through the contract accounting, since that wallet also paid gas for other scenarios) |
+
+Finality was measured again on this run: `30.4, 30.1, 29.9` minutes from accepted to finalized (the challenge window stays at one hour or more).
+
+### A platform finding: a refused payable call keeps its value
+
+The first run's `named` scenario sent a deliberately invalid `create_engagement` with 0.002 GEN to prove the marker rule. The contract refused it (`FINISHED_WITH_ERROR`, nothing recorded), but **the 0.002 GEN stayed in the contract**. The accounting check caught it: `balance` was 2,000,000,000,000,000 wei above what the ledger owes, reported as `in_flight` (the run also lost its `named` scenario to a dropped RPC connection while waiting for that receipt, so it was repeated alone, and its first log is kept as `e2e-log-v6-main.json` with the mismatch visible). A one-off probe of 1,000 wei confirmed it: the contract's physical balance rose by exactly 1,000 and the ledger did not move. On Bradbury, value sent with a transaction that the contract then refuses is not returned to the sender.
+
+What that means here: nothing the app offers is exposed to it, because every failure path the app can reach is checked **before** the transaction is sent (the create form refuses a bad URL, marker or missing engagement id, the challenge dialog sends exactly the bond the contract states), and the contract has no way to hand the value back, since a refused call rolls back its own state and can emit nothing. A script or a hand-built call that sends value with invalid arguments loses that value. The surplus is not at risk and is not owed to anyone: the accounting check now treats it as a known, separate amount. In the repeat run the contract showed `shortfall 0` and a balance equal to what is still owed plus exactly the `2,000,000,000,001,001` wei that those three refused calls left behind (0.002 GEN, the 1,000 wei probe and 1 wei from the repeat), and the script passed its own accounting check.
+<!--ROUND3_END-->
 
 <!--LIVE_START-->
 ## Live evidence (Bradbury, contract v5)
@@ -181,9 +235,9 @@ Final accounting snapshot: `{"balance": 6000000000000000, "in_flight": 0, "short
 | Test Type | Command | What it covers |
 |-----------|---------|----------------|
 | **Lint** | `genvm-lint check contracts/waypoint.py` | static checks |
-| **Direct** | `python -m pytest tests/direct/ -v` | 62 in-memory tests with web and LLM mocks |
+| **Direct** | `python -m pytest tests/direct/ -v` | 70 in-memory tests with web and LLM mocks |
 | **Frontend logic** | `cd frontend && npm test` | action rules, limits mirrored from the contract, decoding |
-| **Live** | `node scripts/e2e.mjs` | the Bradbury run described above, separate client and provider wallets |
+| **Live** | `node scripts/e2e-v6.mjs` (round 3), `node scripts/e2e.mjs` (v5 full run) | the Bradbury runs described above, separate client and provider wallets |
 
 The direct tests cover whole-line matching (negated, historical, quoted,
 planned, split, substring and "and more words" lines all refused), hidden and
@@ -191,13 +245,19 @@ hostile markup (comments, unterminated comments and tags, script, style,
 noscript, svg, template), the reject marker, unreadable pages recording
 nothing, the exact bond amount and its minimum, the inclusive challenge window
 boundary, every verdict path (uphold, overturn, inconclusive, malformed,
-oversized page), the dispute prompt carrying the committed excerpt and the
+oversized page), the marker having to name the engagement, the exact terms
+digest on `accept` (and that it covers every term), pages of exactly and just
+over 2,000,000 bytes (read in full / refused, never cut) for both `verify` and
+`resolve_dispute`, the dispute prompt carrying the committed excerpt and the
 "page changed" fact, prompt-block forgery, the stale split including odd
 amounts, every payout path emitting exactly the funds held and never twice,
 and the accounting.
 
-Every rule was mutation-checked: 82 deliberate breakages, 74 caught. The 8
-survivors are not reachable from direct mode: validators in direct mode
+Every rule was mutation-checked: 98 deliberate breakages, 88 caught. The 10
+survivors are not reachable from direct mode (two of them are equivalent
+after this round's change: the redundant cut inside the page reader, which the
+size check now makes unreachable, and a parse that is skipped for a page that
+is rejected anyway): validators in direct mode
 always recompute exactly what the leader computed, so disagreement paths
 cannot be exercised there, and a few guards (the settlement sum check, the
 duplicate-payout guard, the port and credential checks, the verdict parser)
@@ -235,12 +295,19 @@ and run `npm install && npm run dev` in `frontend/`.
 - **Reads** use an account-free client. **Writes** use a second client built
   with the injected wallet provider and connected to Bradbury before signing,
   as the GenLayerJS docs prescribe for browser wallets.
-- An `ACCEPTED` transaction is **not** treated as done. A write is complete
-  only when the transaction was accepted, its execution returned (not a
-  revert), and the engagement read back in the expected status. Fund-moving
-  writes (`release`, `resolve_dispute`, `reclaim_*`) then keep watching until
-  the transaction is `FINALIZED`, because the transfer lands then, and say so
-  in the UI.
+- An `ACCEPTED` transaction is **not** treated as done, for any write. A write
+  is first *recorded*: the transaction was accepted, its execution returned
+  (not a revert), and the engagement read back in the expected status. The app
+  says "recorded, waiting for finality" and does not report success. Then every
+  write (not only the fund-moving ones) is watched until the transaction is
+  `FINALIZED`; only then does the app check the finalized receipt's GenVM
+  result and read the engagement again (it must be at least as far along as
+  the write made it, so a later step by someone else is fine and an earlier
+  state is reported as a failure), and report success. Fund-moving writes say
+  that the transfer lands at that moment.
+- The provider's Accept button shows the digest of the terms it records, and
+  the create form refuses a marker that does not contain the engagement id
+  before it costs a transaction.
 - The create form validates the URL and markers with the same rules as the
   contract (and a unit test fails if the limits drift apart), shows the exact
   bond a challenge will post, and offers only challenge windows above Bradbury
@@ -291,7 +358,7 @@ recorded the verdict.
 | Method | Access | Notes |
 |---|---|---|
 | `create_engagement` | anyone (payable) | escrows the amount, status `proposed` |
-| `accept` | provider | before the deadline |
+| `accept` | provider | before the deadline; passes the exact `terms_hash` |
 | `submit` | provider | after accepting, before the deadline |
 | `verify` | anyone | whole-line evidence, commits excerpt and digest |
 | `challenge` | client (payable) | exact bond, inside the window |

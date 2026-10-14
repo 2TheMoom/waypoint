@@ -1,0 +1,128 @@
+{
+ "contract": "0x997faAD18C5d30a9EDec492B58f0cfc6EeC69dbb",
+ "run": "mv8ewn6i",
+ "started": "2026-10-14T17:57:09.694Z",
+ "events": [
+  {
+   "t": "2026-10-14T17:57:37.885Z",
+   "scenario": "named",
+   "msg": "create_engagement 0x0b1da30552 exec=FINISHED_WITH_ERROR: refused, as it must be (its 1 wei stays in the contract)",
+   "fn": "create_engagement",
+   "hash": "0x0b1da3055238faf9df29cbbf325ba63b047a72ae02118ef256101dc14f94d529",
+   "exec": "FINISHED_WITH_ERROR",
+   "refused": true,
+   "strandedWei": "1"
+  },
+  {
+   "t": "2026-10-14T17:57:59.027Z",
+   "scenario": "named",
+   "msg": "create_engagement 0xa0087cf10e exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0xa0087cf10e0db9cf04e99d510d5236dbca83a8731b49bd64b4b0eb700072a7a8",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-14T17:58:00.421Z",
+   "scenario": "named",
+   "msg": "terms hash on chain: 95f41458744b047adc6462c739cd7f51222012e0ce88ef3f7d74d8916b71ab55",
+   "termsHash": "95f41458744b047adc6462c739cd7f51222012e0ce88ef3f7d74d8916b71ab55"
+  },
+  {
+   "t": "2026-10-14T17:58:13.518Z",
+   "scenario": "named",
+   "msg": "accept 0x6014387102 exec=FINISHED_WITH_ERROR: refused, as it must be",
+   "fn": "accept",
+   "hash": "0x60143871022b75a7653d50d03e3fc996c1aca0b8499dbef9c498abc97faf6192",
+   "exec": "FINISHED_WITH_ERROR",
+   "refused": true,
+   "strandedWei": "0"
+  },
+  {
+   "t": "2026-10-14T17:58:34.771Z",
+   "scenario": "named",
+   "msg": "accept 0xc4c070990c exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0xc4c070990c917e305d2a318718d6e01aeb3667c783585a4f4c4e56be0ed55fe3",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-14T17:58:47.683Z",
+   "scenario": "named",
+   "msg": "submit 0xaf3fe5799b exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0xaf3fe5799b30a30cd2e6afb8ae28bdc90fca976e8ab959c422dcf3ab5a53fe0b",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-14T17:59:11.744Z",
+   "scenario": "named",
+   "msg": "verify 0x6002273cf0 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "verify",
+   "hash": "0x6002273cf049fb5614a12f06cbedd618189fb72b1b20ab184d7ca0f45c0dd411",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-14T17:59:13.114Z",
+   "scenario": "named",
+   "msg": "verified, committed excerpt \"release notes | wp6-named: q3 pricing release shipped to production 2026 | migration guide published at docs/migrate\" digest 860c97334bec9171",
+   "excerpt": "release notes | wp6-named: q3 pricing release shipped to production 2026 | migration guide published at docs/migrate",
+   "digest": "860c97334bec91713632785352ab1b65bba244ffa96aa609700147e0590af3b4"
+  },
+  {
+   "t": "2026-10-14T17:59:24.749Z",
+   "scenario": "named",
+   "msg": "create_engagement 0x93c24f5c9a exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "create_engagement",
+   "hash": "0x93c24f5c9a8d3938b87cdf26e6b5663bc1b514e6ce400423b9d80f463c7e74f6",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-14T17:59:46.823Z",
+   "scenario": "named",
+   "msg": "accept 0x118d3c28b0 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "accept",
+   "hash": "0x118d3c28b0eda538b52ab6dce11ecfdc2368807dd9018016d932e5de9de1be28",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-14T18:00:19.090Z",
+   "scenario": "named",
+   "msg": "submit 0x020a1a9242 exec=FINISHED_WITH_RETURN result=AGREE",
+   "fn": "submit",
+   "hash": "0x020a1a9242129304a0f0d34dea3beb9771d48685ff09e3a338221cf50c1d52ba",
+   "exec": "FINISHED_WITH_RETURN"
+  },
+  {
+   "t": "2026-10-14T18:00:35.871Z",
+   "scenario": "named",
+   "msg": "verify 0x9694fd2e01 exec=FINISHED_WITH_ERROR result=AGREE",
+   "fn": "verify",
+   "hash": "0x9694fd2e01fb21eb632cac680020a8f729f487f19fa374ece20e9a9c8925f1a3",
+   "exec": "FINISHED_WITH_ERROR"
+  },
+  {
+   "t": "2026-10-14T18:00:58.464Z",
+   "scenario": "named",
+   "msg": "page names another engagement: verify exec=FINISHED_WITH_ERROR, status after = submitted, evidence recorded = \"\""
+  },
+  {
+   "t": "2026-10-14T18:01:00.164Z",
+   "scenario": "accounting",
+   "msg": "OK: nothing short, nothing in flight; the only surplus is 2000000000001001 wei kept from refused payable calls"
+  }
+ ],
+ "results": {
+  "named": "no-id marker refused; wrong terms hash refused; right hash accepted; own line verified; another engagement's line refused"
+ },
+ "accounting": {
+  "balance": "10200000000001001",
+  "in_flight": 2000000000001001,
+  "shortfall": 0,
+  "total_received": "12600000000000000",
+  "total_scheduled": 4400000000000000,
+  "unscheduled": 8200000000000000
+ },
+ "strandedWei": "2000000000001001",
+ "accountingOk": true,
+ "finished": "2026-10-14T18:01:00.164Z"
+}

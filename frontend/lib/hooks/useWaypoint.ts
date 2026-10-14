@@ -7,6 +7,7 @@ import { getContractAddress, getStudioUrl } from "../genlayer/client";
 import { useWallet } from "../genlayer/wallet";
 import { success, error, info, configError } from "../utils/toast";
 import type { Engagement } from "../contracts/types";
+import { addPendingWrite, settlePendingWrite } from "../finality-store";
 
 export type { WriteProgress };
 
@@ -106,6 +107,9 @@ function useWriteAction<TArgs>(
       const id = getEngagementId(args);
       return action(contract, args, (p) => {
         setProgress({ ...p, at: Date.now() });
+        if (p.stage === "confirmed" && p.txHash) addPendingWrite(id, { label: messages.confirmed.title, txHash: p.txHash, since: Date.now() });
+        if (p.stage === "finalized" && p.txHash) settlePendingWrite(id, p.txHash);
+        if (p.stage === "failed" && p.txHash) settlePendingWrite(id, p.txHash, p.message || "Did not finalize as expected.");
         if (p.stage === "finalized") {
           refresh(id);
           const done = messages.finalized ?? {

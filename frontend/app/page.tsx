@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import type { Engagement } from "@/lib/contracts/types";
 import { getTxExplorerUrl } from "@/lib/genlayer/chains";
 import { availableActions, challengeOpen as isChallengeOpen, staleKind, staleOutcome } from "@/lib/engagement-actions";
+import { usePendingWrites } from "@/lib/finality-store";
 import { formatGen, MIN_WINDOW, MIN_STALE, markerNamesEngagement, markerProblem, requiredBond, urlProblem } from "@/lib/limits";
 import type { WriteProgress } from "@/lib/hooks/useWaypoint";
 
@@ -383,6 +384,7 @@ function EngagementHero({ id }: { id: string }) {
   const { data: e, isLoading } = useEngagement(id);
   const { address } = useWallet();
   const now = useNow();
+  const pendingWrites = usePendingWrites(id);
   const acceptAction = useAccept();
   const submitAction = useSubmitDeliverable();
   const verifyAction = useVerify();
@@ -493,6 +495,15 @@ function EngagementHero({ id }: { id: string }) {
           )}
         </div>
       </div>
+
+      {pendingWrites.map((w) => (
+        <div key={w.txHash} className="field-note mt-3 break-words" style={{ color: w.failed ? "var(--rust)" : "var(--brass-bright)" }}>
+          {w.failed
+            ? `✗ ${w.label}: ${w.failed}`
+            : `… ${w.label}: recorded, not final yet. It counts as done once its transaction finalizes (about 30 minutes on Bradbury).`}{" "}
+          <a className="underline" href={getTxExplorerUrl(w.txHash)} target="_blank" rel="noreferrer">{w.txHash.slice(0, 14)}…</a>
+        </div>
+      ))}
 
       <div className="flex gap-3 flex-wrap mt-6 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
         {actions.includes("accept") && (
